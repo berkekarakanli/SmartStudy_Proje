@@ -1267,7 +1267,54 @@ app.post('/upgrade-premium', async (req, res) => {
     }
 });
 
-app.use((req, res) => { 
+// ==========================================
+// 10. DESTEK / İLETİŞİM FORMU
+// SSS'te cevap bulamayan ziyaretçiler (giriş yapmış olsun ya da olmasın)
+// buradan gerçek bir talep gönderebilir; kayıtlar Firestore'da tutulur.
+// ==========================================
+app.get('/destek', async (req, res) => {
+    const user = await currentUser(req);
+    res.render('destek', { user, sent: false });
+});
+
+app.post('/destek', sensitiveActionLimiter, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        const ad = String(req.body.ad || '').trim();
+        const email = String(req.body.email || '').trim().toLowerCase();
+        const konu = String(req.body.konu || '').trim();
+        const mesaj = String(req.body.mesaj || '').trim();
+
+        if (!ad || !email || !mesaj) {
+            return res.status(400).render('destek', {
+                user,
+                sent: false,
+                error: 'Ad, e-posta ve mesaj alanları zorunludur.'
+            });
+        }
+
+        await db.collection('destek_talepleri').add({
+            ad,
+            email,
+            konu: konu || 'Genel',
+            mesaj,
+            user_id: user ? user.id : null,
+            tarih: new Date().toISOString(),
+            durum: 'yeni'
+        });
+
+        res.render('destek', { user, sent: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).render('destek', {
+            user: await currentUser(req),
+            sent: false,
+            error: 'Talebiniz gönderilirken bir sorun oluştu, lütfen tekrar deneyin.'
+        });
+    }
+});
+
+app.use((req, res) => {
     res.status(404).send(errorPage('Sayfa Bulunamadı', 'Aradığınız rota mevcut değil.', '/dashboard')); 
 });
 

@@ -75,6 +75,11 @@
         "source": "/add-video",
         "destination": "https://smartstudy-proje.onrender.com/add-video",
         "type": 302
+      },
+      {
+        "source": "/destek",
+        "destination": "https://smartstudy-proje.onrender.com/destek",
+        "type": 302
       }
     ]
   }
