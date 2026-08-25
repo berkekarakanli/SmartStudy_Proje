@@ -368,6 +368,18 @@ app.post('/register', async (req, res) => {
             return res.status(400).send(errorPage('Kayıt Hatası', msg, '/register'));
         }
 
+        // Web (Bootstrap) kayıt formu artık KVKK Aydınlatma Metni ve Üyelik
+        // Sözleşmesi onay kutuları gönderiyor; native form submit olduğu için
+        // burada da (istemci tarafındaki 'required' kontrolüne ek olarak)
+        // sunucu tarafında doğrulanıyor. Flutter tarafı henüz bu kutucukları
+        // göndermiyor (JSON isteği), o yüzden bu kontrol yalnızca web formuna
+        // uygulanıyor.
+        const kvkkOnayVerildi = req.body.kvkk_onay === 'on';
+        const sozlesmeOnayVerildi = req.body.sozlesme_onay === 'on';
+        if (!wantsJson(req) && (!kvkkOnayVerildi || !sozlesmeOnayVerildi)) {
+            return res.status(400).send(errorPage('Kayıt Hatası', 'Devam etmek için KVKK Aydınlatma Metni\'ni ve Üyelik Sözleşmesi\'ni onaylamalısınız.', '/register'));
+        }
+
         const usersRef = db.collection('users');
         const snapshot = await usersRef.where('email', '==', email).get();
         if (!snapshot.empty) {
@@ -394,7 +406,10 @@ app.post('/register', async (req, res) => {
             bagli_koc_listesi: [],
             bagli_koc_kodu: null,
             bagli_koc_ad: null,
-            kayit_tarihi: new Date().toISOString()
+            kayit_tarihi: new Date().toISOString(),
+            kvkk_onay: kvkkOnayVerildi,
+            sozlesme_onay: sozlesmeOnayVerildi,
+            onay_tarihi: (kvkkOnayVerildi || sozlesmeOnayVerildi) ? new Date().toISOString() : null
         });
 
         if (wantsJson(req)) {
@@ -840,6 +855,8 @@ app.get('/dashboard', requireLogin, async (req, res) => {
                             <a href="/plan" class="sidebar-link orbitron"><i class="fas fa-plus-circle"></i> Yeni Analiz</a>
                             <a href="/wrong-questions" class="sidebar-link orbitron"><i class="fas fa-book"></i> Hata Defterim</a>
                             <a href="/my-coach" class="sidebar-link orbitron"><i class="fas fa-user-tie"></i> Koçum &amp; Ödevlerim</a>
+                            <a href="/pomodoro" class="sidebar-link orbitron"><i class="fas fa-stopwatch"></i> Pomodoro</a>
+                            <a href="/leaderboard" class="sidebar-link orbitron text-warning"><i class="fas fa-trophy"></i> Şöhretler Salonu</a>
                             <a href="/premium-dersler" class="sidebar-link orbitron text-warning"><i class="fas fa-crown"></i> Premium Modül</a>
                             <a href="/profile" class="sidebar-link orbitron"><i class="fas fa-user-cog"></i> Profil</a>
                         </aside>
@@ -872,6 +889,22 @@ app.get('/profile', requireLogin, async (req, res) => {
     const user = await currentUser(req);
     if (!user) return res.redirect('/login');
 
+    const [analizSnap, wrongSnap] = await Promise.all([
+        db.collection('analizler').where('user_id', '==', user.id).get(),
+        db.collection('wrong_questions').where('user_id', '==', user.id).get()
+    ]);
+
+    const pomodoroDakika = Number(user.pomodoro_dakika || 0);
+    const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
+
+    const statCardsHTML = `
+        <div class="row g-3 mb-4 text-center">
+            <div class="col-6 col-md-3"><div class="stat-box"><i class="fas fa-chart-line text-info mb-2"></i><h4 class="m-0">${analizSnap.size}</h4><small class="text-secondary">Analiz</small></div></div>
+            <div class="col-6 col-md-3"><div class="stat-box"><i class="fas fa-book text-danger mb-2"></i><h4 class="m-0">${wrongSnap.size}</h4><small class="text-secondary">Hata Defteri</small></div></div>
+            <div class="col-6 col-md-3"><div class="stat-box"><i class="fas fa-stopwatch text-warning mb-2"></i><h4 class="m-0">${pomodoroDakika}</h4><small class="text-secondary">Odak Dakikası</small></div></div>
+            <div class="col-6 col-md-3"><div class="stat-box"><i class="fas fa-user-tie text-success mb-2"></i><h4 class="m-0">${kocListesi.length}</h4><small class="text-secondary">Bağlı Koç</small></div></div>
+        </div>`;
+
     res.send(`
     <!DOCTYPE html>
     <html lang="tr">
@@ -879,11 +912,13 @@ app.get('/profile', requireLogin, async (req, res) => {
         <meta charset="UTF-8">
         <title>SmartStudy | Profil</title>
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
         <style>
             body{ background:#020617; color:white; font-family:Arial,sans-serif; }
             .panel{ max-width:720px; margin:42px auto; background:rgba(30,41,59,.76); border:1px solid rgba(13,202,240,.25); border-radius:16px; padding:28px; }
             .form-control{ background:#0f172a; border:1px solid #334155; color:white!important; padding:12px; }
             .form-control::placeholder { color: #64748b; }
+            .stat-box{ background:rgba(15,23,42,.7); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:16px 8px; height:100%; }
         </style>
     </head>
     <body>
@@ -895,6 +930,9 @@ app.get('/profile', requireLogin, async (req, res) => {
                 </div>
                 <a href="/dashboard" class="btn btn-outline-info">Panele Dön</a>
             </div>
+
+            ${statCardsHTML}
+
             <form action="/profile" method="POST" class="row g-3">
                 <div class="col-md-6">
                     <label class="form-label">Ad Soyad</label>
@@ -1165,6 +1203,249 @@ app.get('/my-coach', requireLogin, async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Koç bilgisi yüklenirken sorun oluştu.', '/dashboard'));
+    }
+});
+
+// ==========================================
+// 8d. ŞÖHRETLER SALONU (LEADERBOARD) - Web / Bootstrap
+// ==========================================
+app.get('/leaderboard', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.redirect('/login');
+
+        const snap = await db.collection('users').where('role', '==', 'student').get();
+        const fullList = snap.docs.map(d => d.data())
+            .filter(u => Number(u.en_yuksek_net || 0) > 0)
+            .sort((a, b) => Number(b.en_yuksek_net) - Number(a.en_yuksek_net));
+
+        const isPremium = user.level === 'Premium';
+        const visibleList = isPremium ? fullList : fullList.slice(0, 5);
+
+        const rowsHTML = visibleList.map((u, i) => `
+            <tr>
+                <td class="text-center"><span class="badge ${i < 3 ? 'bg-warning text-dark' : 'bg-secondary'}">${i + 1}</span></td>
+                <td>${escapeHtml(u.ad)} ${u.level === 'Premium' ? '<i class="fas fa-badge-check text-info ms-1" title="Premium"></i>' : ''}</td>
+                <td class="text-end text-warning fw-bold">${Number(u.en_yuksek_net).toFixed(2)} NET</td>
+            </tr>
+        `).join('') || '<tr><td colspan="3" class="text-center text-secondary py-4">Henüz yapay zeka tarafından doğrulanmış bir sonuç yok.</td></tr>';
+
+        const lockedRow = (!isPremium && fullList.length > 5) ? `
+            <tr>
+                <td colspan="3" class="text-center py-4">
+                    <i class="fas fa-lock text-warning mb-2 d-block"></i>
+                    <span class="text-warning small">Free üyeler yalnızca ilk 5 kişiyi görebilir.</span>
+                    <a href="/payment" class="btn btn-warning btn-sm fw-bold ms-2">Premium'a Geç</a>
+                </td>
+            </tr>` : '';
+
+        res.send(`
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+            <meta charset="UTF-8">
+            <title>SmartStudy | Şöhretler Salonu</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+            <style>
+                body{ background:#020617; color:white; font-family:Arial,sans-serif; }
+                .panel{ max-width:800px; margin:32px auto; background:rgba(30,41,59,.6); border:1px solid rgba(255,193,7,.25); border-radius:16px; padding:28px; }
+            </style>
+        </head>
+        <body>
+            <main class="panel">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="h3 text-warning mb-0"><i class="fas fa-trophy me-2"></i>Şöhretler Salonu</h1>
+                    <a href="/dashboard" class="btn btn-outline-info">Panele Dön</a>
+                </div>
+
+                <div class="alert alert-dark border border-info small">
+                    <i class="fas fa-info-circle text-info me-1"></i>
+                    Skorlar yalnızca yapay zeka tarafından okunan sınav sonuç belgesi / optik doğrulaması ile güncellenir.
+                </div>
+
+                <form id="opticForm" class="row g-2 mb-4 align-items-end">
+                    <div class="col-md-9">
+                        <label class="form-label small">Sonuç Belgesi / Optik Fotoğrafı</label>
+                        <input type="file" accept="image/*" id="opticImage" class="form-control bg-dark text-white border-secondary" required>
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-warning w-100 fw-bold text-dark" type="submit" id="opticBtn">Doğrula</button>
+                    </div>
+                </form>
+
+                <table class="table table-dark table-hover align-middle">
+                    <thead><tr><th>#</th><th>Öğrenci</th><th class="text-end">Net</th></tr></thead>
+                    <tbody>${rowsHTML}${lockedRow}</tbody>
+                </table>
+            </main>
+            <script>
+                document.getElementById('opticForm').addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const btn = document.getElementById('opticBtn');
+                    const file = document.getElementById('opticImage').files[0];
+                    if (!file) return;
+
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+
+                    const toBase64 = (f) => new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result.split(',').pop());
+                        reader.onerror = reject;
+                        reader.readAsDataURL(f);
+                    });
+
+                    try {
+                        const image_base64 = await toBase64(file);
+                        const res = await fetch('/api/verify-optic-leaderboard', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: ${JSON.stringify(user.id)}, image_base64 })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert('Belge onaylandı! Netiniz: ' + data.verified_net);
+                            location.reload();
+                        } else {
+                            alert(data.message || 'Belge doğrulanamadı.');
+                        }
+                    } catch (err) {
+                        alert('Yükleme sırasında hata oluştu.');
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerHTML = 'Doğrula';
+                    }
+                });
+            </script>
+        </body>
+        </html>`);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Hata', 'Liderlik tablosu yüklenirken sorun oluştu.', '/dashboard'));
+    }
+});
+
+// ==========================================
+// 8e. POMODORO ODAKLANMA SİSTEMİ - Web / Bootstrap
+// ==========================================
+app.get('/pomodoro', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.redirect('/login');
+
+        res.send(`
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+            <meta charset="UTF-8">
+            <title>SmartStudy | Pomodoro</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+            <style>
+                body{ background:#020617; color:white; font-family:Arial,sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding: 24px 16px; }
+                .panel{ max-width:420px; width:100%; background:rgba(30,41,59,.6); border:1px solid rgba(13,202,240,.25); border-radius:20px; padding:36px 28px; text-align:center; }
+                .timer { font-family:'Orbitron', sans-serif; font-size: clamp(3rem, 15vw, 4.5rem); color:#0dcaf0; margin: 20px 0; text-shadow: 0 0 25px rgba(13,202,240,0.4); }
+                .mode-badge { letter-spacing: 2px; }
+            </style>
+        </head>
+        <body>
+            <main class="panel">
+                <a href="/dashboard" class="btn btn-sm btn-outline-info mb-3">Panele Dön</a>
+                <span class="badge bg-info text-dark mode-badge" id="modeBadge">ODAKLANMA</span>
+                <div class="timer" id="timerDisplay">25:00</div>
+                <p class="text-secondary small mb-4">Tamamlanan Odak Seansı: <span id="sessionCount">0</span></p>
+                <div class="d-flex gap-2 justify-content-center">
+                    <button class="btn btn-info fw-bold px-4" id="startBtn">Başlat</button>
+                    <button class="btn btn-outline-secondary px-4" id="resetBtn">Sıfırla</button>
+                </div>
+            </main>
+            <script>
+                const WORK_TIME = 25 * 60;
+                const BREAK_TIME = 5 * 60;
+                let remaining = WORK_TIME;
+                let isWork = true;
+                let isRunning = false;
+                let timerId = null;
+                let sessionCount = 0;
+
+                const display = document.getElementById('timerDisplay');
+                const badge = document.getElementById('modeBadge');
+                const startBtn = document.getElementById('startBtn');
+                const sessionEl = document.getElementById('sessionCount');
+
+                function render() {
+                    const m = String(Math.floor(remaining / 60)).padStart(2, '0');
+                    const s = String(remaining % 60).padStart(2, '0');
+                    display.textContent = m + ':' + s;
+                }
+
+                function beep() {
+                    try {
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        const osc = ctx.createOscillator();
+                        osc.frequency.value = 880;
+                        osc.connect(ctx.destination);
+                        osc.start();
+                        setTimeout(() => { osc.stop(); ctx.close(); }, 600);
+                    } catch (e) {}
+                }
+
+                async function onWorkSessionComplete() {
+                    sessionCount++;
+                    sessionEl.textContent = sessionCount;
+                    try {
+                        await fetch('/update-pomodoro', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: ${JSON.stringify(user.id)}, minutes: 25 })
+                        });
+                    } catch (e) {}
+                }
+
+                function tick() {
+                    remaining--;
+                    if (remaining <= 0) {
+                        beep();
+                        if (isWork) { onWorkSessionComplete(); }
+                        isWork = !isWork;
+                        remaining = isWork ? WORK_TIME : BREAK_TIME;
+                        badge.textContent = isWork ? 'ODAKLANMA' : 'MOLA';
+                        badge.className = 'badge mode-badge ' + (isWork ? 'bg-info text-dark' : 'bg-warning text-dark');
+                    }
+                    render();
+                }
+
+                startBtn.addEventListener('click', () => {
+                    isRunning = !isRunning;
+                    if (isRunning) {
+                        timerId = setInterval(tick, 1000);
+                        startBtn.textContent = 'Duraklat';
+                    } else {
+                        clearInterval(timerId);
+                        startBtn.textContent = 'Başlat';
+                    }
+                });
+
+                document.getElementById('resetBtn').addEventListener('click', () => {
+                    clearInterval(timerId);
+                    isRunning = false;
+                    isWork = true;
+                    remaining = WORK_TIME;
+                    badge.textContent = 'ODAKLANMA';
+                    badge.className = 'badge bg-info text-dark mode-badge';
+                    startBtn.textContent = 'Başlat';
+                    render();
+                });
+
+                render();
+            </script>
+        </body>
+        </html>`);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Hata', 'Pomodoro sayfası yüklenirken sorun oluştu.', '/dashboard'));
     }
 });
 
