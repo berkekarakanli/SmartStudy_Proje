@@ -27,6 +27,7 @@
             <button class="btn btn-outline-secondary px-4" id="resetBtn">Sıfırla</button>
         </div>
     </main>
+    <audio id="alarmSound" src="/audio/alarm.mp3" preload="auto"></audio>
     <script>
         const CURRENT_USER_ID = <%- JSON.stringify(user.id) %>;
         const WORK_TIME = 25 * 60;
@@ -48,29 +49,14 @@
             display.textContent = m + ':' + s;
         }
 
-        // NOT: Flutter'daki gerçek alarm.mp3 dosyası şu an projede mevcut
-        // değil (pubspec.yaml'da assets tanımı da yorum satırı), o yüzden
-        // geçici olarak 3 saniye süren sentetik bir alarm sesi çalıyoruz.
-        // Gerçek ses dosyası eklendiğinde <audio> etiketiyle değiştirilecek.
+        // Flutter'daki AssetSource('audio/alarm.mp3') ile aynı gerçek ses
+        // dosyası. 3 saniye çalıp otomatik duruyor.
+        const alarmSound = document.getElementById('alarmSound');
         function beep() {
             try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const totalDuration = 3; // saniye
-                const beepLength = 0.35;
-                const gap = 0.25;
-                let t = ctx.currentTime;
-                while (t < ctx.currentTime + totalDuration) {
-                    const osc = ctx.createOscillator();
-                    const gain = ctx.createGain();
-                    osc.frequency.value = 880;
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    gain.gain.setValueAtTime(0.25, t);
-                    osc.start(t);
-                    osc.stop(t + beepLength);
-                    t += beepLength + gap;
-                }
-                setTimeout(() => ctx.close(), (totalDuration + 0.5) * 1000);
+                alarmSound.currentTime = 0;
+                alarmSound.play().catch(() => {});
+                setTimeout(() => { alarmSound.pause(); alarmSound.currentTime = 0; }, 3000);
             } catch (e) {}
         }
 

@@ -73,6 +73,12 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'smartstudy-dev-secret-chan
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+// Sadece /audio klasörü statik olarak servis ediliyor (ör. pomodoro alarm
+// sesi). Bilinçli olarak public/'in tamamını statik açmıyoruz - o klasörde
+// gerçek kullanıcı verisiyle doldurulması gereken .html şablonları da var;
+// blanket bir express.static bunları render edilmemiş/ham haliyle sızdırırdı.
+app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
+
 // Ortama göre çerez ayarı (Lokalde false, canlıda (Render/Firebase) true ve none olur)
 const isProduction = process.env.NODE_ENV === 'production';
 
