@@ -418,6 +418,17 @@ app.post('/register', registerLimiter, async (req, res) => {
             kocKodu = 'KOC-' + Math.random().toString(36).substr(2, 5).toUpperCase();
         }
 
+        // Davet (referans) sistemi: her kullanıcının kendi kodu var, bu kodla
+        // gelen her yeni kayıt referral_count'u artırır; 10'a ulaşınca
+        // davet eden otomatik Premium olur.
+        const referralCode = 'SS-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        const gelenRefKodu = String(req.body.ref || '').trim().toUpperCase();
+        let referrerDoc = null;
+        if (gelenRefKodu) {
+            const refSnap = await usersRef.where('referral_code', '==', gelenRefKodu).limit(1).get();
+            if (!refSnap.empty) referrerDoc = refSnap.docs[0];
+        }
+
         const newUserRef = await usersRef.add({
             role,
             ad,
@@ -434,8 +445,21 @@ app.post('/register', registerLimiter, async (req, res) => {
             kayit_tarihi: new Date().toISOString(),
             kvkk_onay: kvkkOnayVerildi,
             sozlesme_onay: sozlesmeOnayVerildi,
-            onay_tarihi: (kvkkOnayVerildi || sozlesmeOnayVerildi) ? new Date().toISOString() : null
+            onay_tarihi: (kvkkOnayVerildi || sozlesmeOnayVerildi) ? new Date().toISOString() : null,
+            referral_code: referralCode,
+            referral_count: 0,
+            referred_by: referrerDoc ? referrerDoc.id : null
         });
+
+        if (referrerDoc) {
+            const yeniSayi = Number(referrerDoc.data().referral_count || 0) + 1;
+            const referrerUpdates = { referral_count: yeniSayi };
+            // Her 10 davette bir Premium ödülü (zaten Premium'sa dokunmuyor).
+            if (yeniSayi % 10 === 0 && referrerDoc.data().level !== 'Premium') {
+                referrerUpdates.level = 'Premium';
+            }
+            await referrerDoc.ref.update(referrerUpdates);
+        }
 
         if (wantsJson(req)) {
             return res.json({ success: true, userId: newUserRef.id, id: newUserRef.id, role });
@@ -660,12 +684,25 @@ app.get('/profile', requireLogin, async (req, res) => {
     const pomodoroDakika = Number(user.pomodoro_dakika || 0);
     const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
 
+    // Bu özellikten önce kayıt olmuş hesapların referans kodu yok; ilk profil
+    // ziyaretinde kendiliğinden bir kod üretip kalıcı olarak kaydediyoruz.
+    let referralCode = user.referral_code;
+    if (!referralCode) {
+        referralCode = 'SS-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        await db.collection('users').doc(user.id).update({ referral_code: referralCode });
+    }
+    const referralCount = Number(user.referral_count || 0);
+    const referralRemaining = 10 - (referralCount % 10);
+
     res.render('profile', {
         user,
         analizCount: analizSnap.size,
         wrongCount: wrongSnap.size,
         pomodoroDakika,
-        kocListesi
+        kocListesi,
+        referralCode,
+        referralCount,
+        referralRemaining
     });
 });
 

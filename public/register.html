@@ -290,6 +290,8 @@
             
             <!-- GİZLİ INPUT (Rol Değerini Server'a Göndermek İçin) -->
             <input type="hidden" name="role" id="selected-role" value="student">
+            <!-- Davet linkiyle gelindiyse (?ref=KOD) referans kodu buradan taşınır -->
+            <input type="hidden" name="ref" id="ref-code" value="">
 
             <!-- ÖZEL ROL SEÇİCİ TASARIMI -->
             <div class="role-selector">
@@ -436,6 +438,12 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Davet linkiyle gelindiyse (?ref=KOD) kodu gizli alana yaz.
+        (function () {
+            const refKod = new URLSearchParams(window.location.search).get('ref');
+            if (refKod) document.getElementById('ref-code').value = refKod;
+        })();
+
         // TEMA DEĞİŞTİRME MOTORU (Öğrenci <-> Öğretmen)
         function switchTheme(role) {
             const root = document.documentElement;
