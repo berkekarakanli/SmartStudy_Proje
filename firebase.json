@@ -1,28 +1,15 @@
 {
   "hosting": {
-    "public": "public",
+    "public": "../frontend/build/web",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ],
-    // Burası yeni eklenen sihirli yönlendirme kısmı:
     "rewrites": [
       {
-        "source": "/login",
-        "destination": "/login.html"
-      },
-      {
-        "source": "/register",
-        "destination": "/register.html"
-      },
-      {
-        "source": "/dashboard",
-        "destination": "/dashboard.html"
-      },
-      {
-        "source": "/plan",
-        "destination": "/plan.html"
+        "source": "**",
+        "destination": "/index.html"
       }
     ]
   }

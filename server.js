@@ -4,14 +4,21 @@ const session = require('express-session');
 const path = require('path');
 const crypto = require('crypto');
 const cors = require('cors');
+const { readNetFromOpticImage } = require('./geminiService');
 
 const app = express();
+
+// Render (ve genel olarak her reverse proxy arkasındaki Node servisi) için
+// zorunlu: bu olmadan Express "secure" cookie'yi doğru işleyemez ve
+// express-session hiçbir zaman oturum çerezini tarayıcıya yazmaz. Bunun
+// eksik olması "Oturum süresi doldu" hatasının asıl sebeplerinden biriydi.
+app.set('trust proxy', 1);
 
 // ==========================================
 // 0. CORS VE GÜVENLİK AYARLARI (GÜNCELLENDİ)
 // ==========================================
 app.use(cors({
-    origin: ['https://smartstudy-9c6e1.web.app', 'http://localhost:3000'],
+    origin: ['https://smartstudy-9c6e1.web.app', 'http://localhost:3000', 'http://localhost:5000'],
     credentials: true
 }));
 
@@ -21,11 +28,40 @@ app.use(cors({
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 
-const serviceAccount = require('./serviceAccountKey.json');
+// serviceAccountKey.json bilinçli olarak .gitignore'da (gizli anahtar Git'e
+// asla gitmemeli), bu yüzden Render gibi Git'ten deploy eden platformlarda bu
+// dosya AKIŞTA HİÇBİR ZAMAN bulunmaz. Eskiden burada doğrudan require()
+// yapılıyordu; bu, dosyanın olmadığı her ortamda (yani Render'da) sunucunun
+// açılışta çökmesine (MODULE_NOT_FOUND) ve dolayısıyla "API'ye bağlanılamıyor"
+// / "oturum süresi doldu" gibi tüm canlı hatalara yol açıyordu. Şimdi önce
+// FIREBASE_SERVICE_ACCOUNT ortam değişkenine (Render'da tanımlanacak, JSON
+// anahtarının tamamının string hali), yoksa yerel dosyaya bakılıyor.
+function loadServiceAccount() {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        try {
+            return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        } catch (e) {
+            console.error('[FIREBASE] FIREBASE_SERVICE_ACCOUNT ortam değişkeni geçerli bir JSON değil:', e.message);
+        }
+    }
+    try {
+        return require('./serviceAccountKey.json');
+    } catch (e) {
+        return null;
+    }
+}
+
+const serviceAccount = loadServiceAccount();
 if (!getApps().length) {
-    initializeApp({
-        credential: cert(serviceAccount)
-    });
+    if (serviceAccount) {
+        initializeApp({ credential: cert(serviceAccount) });
+    } else {
+        console.error(
+            '[FIREBASE] Servis hesabı bulunamadı! Render\'da FIREBASE_SERVICE_ACCOUNT ortam ' +
+            'değişkenini (serviceAccountKey.json dosyasının TÜM içeriği, tek satır JSON olarak) ' +
+            'tanımlayın. Aksi halde Firestore\'a bağlanan hiçbir uç çalışmaz.'
+        );
+    }
 }
 const db = getFirestore();
 
@@ -131,9 +167,13 @@ function buildDailyTasks(analysis) {
 // ==========================================
 // 3. OTURUM YÖNETİMİ VE KONTROLLERİ
 // ==========================================
+function wantsJson(req) {
+    return req.headers['content-type'] === 'application/json' || req.xhr || req.headers.accept?.includes('json');
+}
+
 async function requireLogin(req, res, next) {
     if (!req.session.userId) {
-        if (req.headers['content-type'] === 'application/json' || req.xhr || req.headers.accept?.includes('json')) {
+        if (wantsJson(req)) {
             return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
         }
         return res.redirect('/login');
@@ -146,6 +186,37 @@ async function currentUser(req) {
     const doc = await db.collection('users').doc(req.session.userId).get();
     if (!doc.exists) return null;
     return { id: doc.id, ...doc.data() };
+}
+
+// Flutter (mobil + web) istemcisi session çerezi taşımıyor; bunun yerine
+// userId'yi doğrudan query/body içinde gönderiyor. Bu fonksiyon önce
+// session'a bakar (Bootstrap web arayüzü için), yoksa istekte gelen userId'yi
+// Firestore'da doğrulayarak kullanıcıyı döndürür (mobil/stateless istekler
+// için). Böylece aynı uç hem tarayıcıdan hem uygulamadan çalışabilir.
+async function resolveUser(req) {
+    const sessionUser = await currentUser(req);
+    if (sessionUser) return sessionUser;
+
+    const explicitId = req.body?.userId || req.query?.userId;
+    if (!explicitId) return null;
+
+    const doc = await db.collection('users').doc(String(explicitId)).get();
+    if (!doc.exists) return null;
+    return { id: doc.id, ...doc.data() };
+}
+
+// /generate-plan, /assign-homework, /api/teacher-data gibi hem web (session)
+// hem mobil (explicit userId) tarafından çağrılan uçlar için ortak middleware.
+async function requireUser(req, res, next) {
+    const user = await resolveUser(req);
+    if (!user) {
+        if (wantsJson(req)) {
+            return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+        }
+        return res.redirect('/login');
+    }
+    req.currentUser = user;
+    next();
 }
 
 function syncSessionUser(req, user) {
@@ -170,9 +241,9 @@ app.get('/plan', requireLogin, async (req, res) => {
 });
 
 // EĞİTMEN VERİ API
-app.get('/api/teacher-data', requireLogin, async (req, res) => {
+app.get('/api/teacher-data', requireUser, async (req, res) => {
     try {
-        const user = await currentUser(req);
+        const user = req.currentUser;
         if (!user || user.role !== 'teacher') {
             return res.status(403).json({ success: false, message: 'Yetkisiz erişim' });
         }
@@ -292,13 +363,17 @@ app.post('/register', async (req, res) => {
         const role = req.body.role === 'teacher' ? 'teacher' : 'student';
 
         if (!ad || !email || sifre.length < 6) {
-            return res.status(400).send(errorPage('Kayıt Hatası', 'Tüm alanları doğru doldurun.', '/register'));
+            const msg = 'Tüm alanları doğru doldurun.';
+            if (wantsJson(req)) return res.status(400).json({ success: false, message: msg });
+            return res.status(400).send(errorPage('Kayıt Hatası', msg, '/register'));
         }
 
         const usersRef = db.collection('users');
         const snapshot = await usersRef.where('email', '==', email).get();
         if (!snapshot.empty) {
-            return res.status(409).send(errorPage('Kayıt Hatası', 'Bu e-posta sistemde zaten kayıtlı.', '/register'));
+            const msg = 'Bu e-posta sistemde zaten kayıtlı.';
+            if (wantsJson(req)) return res.status(409).json({ success: false, message: msg });
+            return res.status(409).send(errorPage('Kayıt Hatası', msg, '/register'));
         }
 
         let kocKodu = null;
@@ -306,25 +381,31 @@ app.post('/register', async (req, res) => {
             kocKodu = 'KOC-' + Math.random().toString(36).substr(2, 5).toUpperCase();
         }
 
-        await usersRef.add({
-            role, 
-            ad, 
+        const newUserRef = await usersRef.add({
+            role,
+            ad,
             email,
             sifre: hashPassword(sifre),
             level: 'Free',
-            koc_kodu: kocKodu, 
-            teacher_type: null, 
+            koc_kodu: kocKodu,
+            teacher_type: null,
             branch: null,
             bagli_koc_kodlari: [],
             bagli_koc_listesi: [],
-            bagli_koc_kodu: null, 
+            bagli_koc_kodu: null,
             bagli_koc_ad: null,
             kayit_tarihi: new Date().toISOString()
         });
+
+        if (wantsJson(req)) {
+            return res.json({ success: true, userId: newUserRef.id, id: newUserRef.id, role });
+        }
         res.redirect('/login');
     } catch (error) {
         console.error(error);
-        res.status(500).send(errorPage('Sunucu Hatası', 'Kayıt işlemi sırasında hata oluştu.', '/register'));
+        const msg = 'Kayıt işlemi sırasında hata oluştu.';
+        if (wantsJson(req)) return res.status(500).json({ success: false, message: msg });
+        res.status(500).send(errorPage('Sunucu Hatası', msg, '/register'));
     }
 });
 
@@ -354,7 +435,7 @@ app.post('/login', async (req, res) => {
         }
 
         syncSessionUser(req, user);
-        res.json({ success: true, role: user.role });
+        res.json({ success: true, role: user.role, userId: user.id, id: user.id, level: user.level || 'Free' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'Sunucu bağlantı hatası.' });
@@ -757,6 +838,8 @@ app.get('/dashboard', requireLogin, async (req, res) => {
                         <aside class="col-md-2">
                             <a href="/dashboard" class="sidebar-link orbitron text-info"><i class="fas fa-columns"></i> Genel Bakış</a>
                             <a href="/plan" class="sidebar-link orbitron"><i class="fas fa-plus-circle"></i> Yeni Analiz</a>
+                            <a href="/wrong-questions" class="sidebar-link orbitron"><i class="fas fa-book"></i> Hata Defterim</a>
+                            <a href="/my-coach" class="sidebar-link orbitron"><i class="fas fa-user-tie"></i> Koçum &amp; Ödevlerim</a>
                             <a href="/premium-dersler" class="sidebar-link orbitron text-warning"><i class="fas fa-crown"></i> Premium Modül</a>
                             <a href="/profile" class="sidebar-link orbitron"><i class="fas fa-user-cog"></i> Profil</a>
                         </aside>
@@ -860,6 +943,228 @@ app.post('/profile', requireLogin, async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Profil güncellenirken bir sorun oluştu.', '/profile'));
+    }
+});
+
+// ==========================================
+// 8b. DİJİTAL HATA DEFTERİ (WRONG QUESTIONS) - Web / Bootstrap
+// Flutter'daki "Yanlış Sorular" ekranının web panelindeki karşılığı.
+// Aynı veriyi (wrong_questions koleksiyonu) ve aynı JSON uçlarını kullanır.
+// ==========================================
+app.get('/wrong-questions', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.redirect('/login');
+
+        const snap = await db.collection('wrong_questions').where('user_id', '==', user.id).get();
+        const questions = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
+
+        const limitReached = user.level !== 'Premium' && questions.length >= 5;
+
+        const cardsHTML = questions.map(q => `
+            <div class="col-md-4 col-lg-3">
+                <div class="card bg-dark border-secondary h-100">
+                    ${q.image_base64 ? `<img src="data:image/jpeg;base64,${q.image_base64}" class="card-img-top" style="max-height:220px;object-fit:cover;" alt="Soru görseli">` : '<div class="text-center text-secondary py-5 small">Fotoğraf yok</div>'}
+                    <div class="card-body">
+                        <p class="small text-secondary mb-1">${escapeHtml(q.tarih ? new Date(q.tarih).toLocaleDateString('tr-TR') : '')}</p>
+                        <p class="card-text text-success small">${escapeHtml(q.ai_solution || 'Not yok')}</p>
+                        <form data-delete-form action="/api/delete-wrong-question" method="POST" class="m-0">
+                            <input type="hidden" name="questionId" value="${escapeHtml(q.id)}">
+                            <button class="btn btn-sm btn-outline-danger w-100"><i class="fas fa-trash me-1"></i> Sil</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `).join('') || '<p class="text-secondary">Henüz hiç yanlış sorun yok. Aşağıdaki formdan ekleyebilirsin.</p>';
+
+        res.send(`
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+            <meta charset="UTF-8">
+            <title>SmartStudy | Dijital Hata Defteri</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+            <style>
+                body{ background:#020617; color:white; font-family:Arial,sans-serif; }
+                .panel{ max-width:1100px; margin:32px auto; background:rgba(30,41,59,.6); border:1px solid rgba(13,202,240,.25); border-radius:16px; padding:28px; }
+                .form-control{ background:#0f172a; border:1px solid #334155; color:white!important; padding:10px; }
+            </style>
+        </head>
+        <body>
+            <main class="panel">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="h3 text-info mb-0"><i class="fas fa-book me-2"></i>Dijital Hata Defterim</h1>
+                    <a href="/dashboard" class="btn btn-outline-info">Panele Dön</a>
+                </div>
+
+                ${limitReached ? `<div class="alert alert-warning"><i class="fas fa-lock me-2"></i>Free üyelikte en fazla 5 soru saklayabilirsin. Sınırsız eklemek için <a href="/payment" class="alert-link">Premium'a geç</a>.</div>` : `
+                <form id="addForm" class="row g-3 mb-4 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label small">Soru Fotoğrafı</label>
+                        <input type="file" accept="image/*" id="questionImage" class="form-control" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small">Doğru Çözüm / Not</label>
+                        <input type="text" id="questionNote" class="form-control" placeholder="Örn: İşlem hatası yaptım...">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-info w-100 fw-bold" type="submit">Ekle</button>
+                    </div>
+                </form>
+                `}
+
+                <div class="row g-3">${cardsHTML}</div>
+            </main>
+            <script>
+                const addForm = document.getElementById('addForm');
+                if (addForm) {
+                    addForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const fileInput = document.getElementById('questionImage');
+                        const note = document.getElementById('questionNote').value;
+                        const file = fileInput.files[0];
+                        if (!file) return;
+
+                        const toBase64 = (f) => new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result.split(',').pop());
+                            reader.onerror = reject;
+                            reader.readAsDataURL(f);
+                        });
+
+                        const image_base64 = await toBase64(file);
+                        const res = await fetch('/api/wrong-questions/add', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                userId: ${JSON.stringify(user.id)},
+                                question_text: 'Hatalı Soru Kaydı',
+                                ai_solution: note || 'Not girilmemiş.',
+                                image_base64
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.success) { location.reload(); } else { alert(data.message || 'Soru eklenemedi.'); }
+                    });
+                }
+
+                document.querySelectorAll('[data-delete-form]').forEach(form => {
+                    form.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const questionId = form.querySelector('input[name=questionId]').value;
+                        const res = await fetch('/api/delete-wrong-question', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: ${JSON.stringify(user.id)}, questionId })
+                        });
+                        const data = await res.json();
+                        if (data.success) { location.reload(); } else { alert(data.message || 'Soru silinemedi.'); }
+                    });
+                });
+            </script>
+        </body>
+        </html>`);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Hata', 'Hata defteri yüklenirken sorun oluştu.', '/dashboard'));
+    }
+});
+
+// ==========================================
+// 8c. ÖĞRENCİ: KOÇUM & ÖDEVLERİM - Web / Bootstrap
+// Flutter'daki "Öğrenci-Koç" ekranının web panelindeki karşılığı.
+// ==========================================
+app.get('/my-coach', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.redirect('/login');
+        if (user.role !== 'student') return res.redirect('/dashboard');
+
+        const hwSnap = await db.collection('homeworks').where('student_id', '==', user.id).get();
+        const homeworks = hwSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ kod: user.bagli_koc_kodu, ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
+        const coachListHTML = kocListesi.length > 0 ? kocListesi.map(c => `
+            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary">
+                <div><i class="fas fa-check-circle text-success me-1"></i> <strong>${escapeHtml(c.ad)}</strong> <span class="text-secondary small ms-1">(${escapeHtml(c.kod)})</span></div>
+                <form action="/remove-coach" method="POST" class="m-0">
+                    <input type="hidden" name="coachCode" value="${escapeHtml(c.kod)}">
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" title="Bu Koçtan Ayrıl"><i class="fas fa-times"></i></button>
+                </form>
+            </div>
+        `).join('') : '<p class="text-white small mb-3">Henüz bir eğitmene bağlı değilsin.</p>';
+
+        const hwRowsHTML = homeworks.map(hw => {
+            const completed = hw.completed === true || hw.status === 'completed';
+            const topic = Array.isArray(hw.topics) ? hw.topics.join(', ') : (hw.topics || '');
+            return `
+            <div class="card bg-dark border-secondary mb-2 ${completed ? 'border-success' : ''}">
+                <div class="card-body d-flex justify-content-between align-items-center py-2">
+                    <div class="form-check m-0">
+                        <input class="form-check-input hw-toggle" type="checkbox" data-id="${escapeHtml(hw.id)}" id="hw-${escapeHtml(hw.id)}" ${completed ? 'checked' : ''}>
+                        <label class="form-check-label ${completed ? 'text-white-50 text-decoration-line-through' : 'text-white'}" for="hw-${escapeHtml(hw.id)}">
+                            <strong>${escapeHtml(hw.subject || 'Ders')}</strong> — ${escapeHtml(hw.exam_type || '')}<br>
+                            <span class="text-secondary small">${escapeHtml(topic)}</span>
+                        </label>
+                    </div>
+                </div>
+            </div>`;
+        }).join('') || '<p class="text-secondary small">Şu an atanmış aktif ödevin yok.</p>';
+
+        res.send(`
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+            <meta charset="UTF-8">
+            <title>SmartStudy | Koçum &amp; Ödevlerim</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+            <style>
+                body{ background:#020617; color:white; font-family:Arial,sans-serif; }
+                .panel{ max-width:900px; margin:32px auto; background:rgba(30,41,59,.6); border:1px solid rgba(13,202,240,.25); border-radius:16px; padding:28px; }
+                .form-control{ background:#0f172a; border:1px solid #334155; color:white!important; padding:10px; }
+            </style>
+        </head>
+        <body>
+            <main class="panel">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="h3 text-info mb-0"><i class="fas fa-user-tie me-2"></i>Eğitim Koçum &amp; Ödevlerim</h1>
+                    <a href="/dashboard" class="btn btn-outline-info">Panele Dön</a>
+                </div>
+
+                <div class="card bg-dark border-warning border-opacity-25 p-3 mb-4">
+                    <h6 class="text-warning orbitron mb-3">Eğitim Koçlarım (${kocListesi.length})</h6>
+                    ${coachListHTML}
+                    <p class="text-secondary small mt-3 mb-2">Başka bir koçla eşleşmek için kod gir:</p>
+                    <form action="/set-coach" method="POST" class="d-flex gap-2">
+                        <input type="text" name="coachCode" class="form-control form-control-sm bg-dark text-warning border-warning" placeholder="KOC-XXXXX" required>
+                        <button type="submit" class="btn btn-warning btn-sm fw-bold">Ekle</button>
+                    </form>
+                </div>
+
+                <h6 class="text-info orbitron mb-3">Koç Tarafından Verilen Ödevler (${homeworks.length})</h6>
+                ${hwRowsHTML}
+            </main>
+            <script>
+                document.querySelectorAll('.hw-toggle').forEach(cb => {
+                    cb.addEventListener('change', async () => {
+                        const res = await fetch('/api/update-homework', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ homeworkId: cb.dataset.id, completed: cb.checked })
+                        });
+                        const data = await res.json();
+                        if (data.success) { location.reload(); } else { alert(data.message || 'Güncellenemedi.'); }
+                    });
+                });
+            </script>
+        </body>
+        </html>`);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Hata', 'Koç bilgisi yüklenirken sorun oluştu.', '/dashboard'));
     }
 });
 
@@ -1126,58 +1431,81 @@ app.post('/delete-note', requireLogin, async (req, res) => {
     res.redirect('/premium-dersler');
 });
 
-app.post('/delete-analysis', requireLogin, async (req, res) => {
-    try { 
-        await db.collection('analizler').doc(req.body.analizId).delete(); 
-        res.redirect('/dashboard'); 
-    } catch (error) { 
-        console.error(error);
-        res.status(500).send(errorPage('Hata', 'Analiz silinemedi.', '/dashboard')); 
-    }
-});
-
-app.post('/generate-plan', requireLogin, async (req, res) => {
+async function deleteAnalizHandler(req, res) {
     try {
-        const user = await currentUser(req);
-        let toplamNet = 0; 
+        const user = req.currentUser;
+        const analizId = req.body.analizId;
+        if (!analizId) {
+            if (wantsJson(req)) return res.status(400).json({ success: false, message: 'analizId gerekli.' });
+            return res.status(400).send(errorPage('Hata', 'analizId gerekli.', '/dashboard'));
+        }
+
+        const ref = db.collection('analizler').doc(analizId);
+        const doc = await ref.get();
+        if (!doc.exists || doc.data().user_id !== user.id) {
+            if (wantsJson(req)) return res.status(404).json({ success: false, message: 'Analiz bulunamadı.' });
+            return res.status(404).send(errorPage('Hata', 'Analiz bulunamadı.', '/dashboard'));
+        }
+
+        await ref.delete();
+        if (wantsJson(req)) return res.json({ success: true });
+        res.redirect('/dashboard');
+    } catch (error) {
+        console.error(error);
+        if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Analiz silinemedi.' });
+        res.status(500).send(errorPage('Hata', 'Analiz silinemedi.', '/dashboard'));
+    }
+}
+// Web (Bootstrap panel) tarafı bu rotayı kullanır.
+app.post('/delete-analysis', requireUser, deleteAnalizHandler);
+// Flutter (mobil + web) tarafı bu adı kullanıyor; aynı mantığı çalıştırır.
+app.post('/delete-analiz', requireUser, deleteAnalizHandler);
+
+app.post('/generate-plan', requireUser, async (req, res) => {
+    try {
+        const user = req.currentUser;
+        let toplamNet = 0;
         const detaylar = {};
         const sinav_turu = req.body.sinav_turu || 'TYT';
         const hedef_net = req.body.hedef ? Number(req.body.hedef) : null;
-        
+
         for (const [key, value] of Object.entries(req.body)) {
-            if (!['sinav_turu', 'role', 'hedef'].includes(key)) { 
-                detaylar[key] = Number(value) || 0; 
-                toplamNet += detaylar[key]; 
+            if (!['sinav_turu', 'role', 'hedef', 'userId', 'is_ai_request'].includes(key)) {
+                detaylar[key] = Number(value) || 0;
+                toplamNet += detaylar[key];
             }
         }
-        
-        await db.collection('analizler').add({ 
-            user_id: user.id, 
+
+        const docRef = await db.collection('analizler').add({
+            user_id: user.id,
             sinav_turu: sinav_turu,
             hedef_net: hedef_net,
-            toplam_net: toplamNet, 
-            detaylar, 
-            matematik: detaylar.mat || 0, 
-            turkce: detaylar.turkce || 0, 
-            fen: detaylar.fen || 0, 
-            sosyal: detaylar.sosyal || 0, 
-            tarih: new Date().toISOString() 
+            toplam_net: toplamNet,
+            detaylar,
+            matematik: detaylar.mat || 0,
+            turkce: detaylar.turkce || 0,
+            fen: detaylar.fen || 0,
+            sosyal: detaylar.sosyal || 0,
+            tarih: new Date().toISOString()
         });
-        
+
+        if (wantsJson(req)) return res.status(201).json({ success: true, id: docRef.id, toplam_net: toplamNet });
         res.redirect('/dashboard');
-    } catch (error) { 
+    } catch (error) {
         console.error(error);
-        res.status(500).send(errorPage('Hata', 'Analiz kaydedilemedi.', '/plan')); 
+        if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Analiz kaydedilemedi.' });
+        res.status(500).send(errorPage('Hata', 'Analiz kaydedilemedi.', '/plan'));
     }
 });
 
-app.post('/assign-homework', requireLogin, async (req, res) => {
+app.post('/assign-homework', requireUser, async (req, res) => {
     try {
-        const user = await currentUser(req);
+        const user = req.currentUser;
         if (!user || user.role !== 'teacher') {
+            if (wantsJson(req)) return res.status(403).json({ success: false, message: 'Sadece öğretmenler ödev verebilir.' });
             return res.status(403).send(errorPage('Yetki Hatası', 'Sadece öğretmenler ödev verebilir.', '/dashboard'));
         }
-        
+
         let subject = req.body.subject;
         if (user.teacher_type === 'brans') {
             subject = user.branch;
@@ -1185,24 +1513,337 @@ app.post('/assign-homework', requireLogin, async (req, res) => {
 
         const { student_id, exam_type } = req.body;
         let assigned_topics = req.body.assigned_topics;
-        
-        if (!assigned_topics) return res.status(400).send(errorPage('Eksik Veri', 'Lütfen en az bir konu seçimi yapın.', '/plan'));
+
+        if (!assigned_topics) {
+            if (wantsJson(req)) return res.status(400).json({ success: false, message: 'Lütfen en az bir konu seçimi yapın.' });
+            return res.status(400).send(errorPage('Eksik Veri', 'Lütfen en az bir konu seçimi yapın.', '/plan'));
+        }
         if (!Array.isArray(assigned_topics)) assigned_topics = [assigned_topics];
 
-        await db.collection('homeworks').add({ 
-            teacher_id: user.id, 
-            student_id: student_id, 
-            exam_type, 
-            subject: subject || 'Genel', 
-            topics: assigned_topics, 
-            date_assigned: new Date().toISOString(), 
-            status: 'pending' 
+        const hwRef = await db.collection('homeworks').add({
+            teacher_id: user.id,
+            student_id: student_id,
+            exam_type,
+            subject: subject || 'Genel',
+            topics: assigned_topics,
+            date_assigned: new Date().toISOString(),
+            status: 'pending',
+            completed: false
         });
-        
+
+        if (wantsJson(req)) return res.status(201).json({ success: true, id: hwRef.id });
         res.redirect('/dashboard');
-    } catch (error) { 
+    } catch (error) {
         console.error(error);
-        res.status(500).send(errorPage('Hata', 'Ödev atanamadı.', '/plan')); 
+        if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Ödev atanamadı.' });
+        res.status(500).send(errorPage('Hata', 'Ödev atanamadı.', '/plan'));
+    }
+});
+
+// ==========================================
+// 9. MOBİL / FLUTTER JSON API UÇLARI
+// (server.js'de eskiden hiç karşılığı olmayan, Flutter tarafının
+// çağırdığı ama backend'de eksik olan rotalar)
+// ==========================================
+
+// --- Analiz listesi (Flutter dashboard/pomodoro/profil ekranları) ---
+app.get('/api/analizler', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const snap = await db.collection('analizler').where('user_id', '==', user.id).get();
+        const analizler = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
+
+        res.json({ success: true, analizler, userLevel: user.level || 'Free' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Analizler alınamadı.' });
+    }
+});
+
+// --- Dijital Hata Defteri (Wrong Questions) ---
+app.get('/api/wrong-questions', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const snap = await db.collection('wrong_questions').where('user_id', '==', user.id).get();
+        const questions = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
+
+        res.json({ success: true, questions, userLevel: user.level || 'Free' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Sorular alınamadı.' });
+    }
+});
+
+app.post('/api/wrong-questions/add', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        if (user.level !== 'Premium') {
+            const existing = await db.collection('wrong_questions').where('user_id', '==', user.id).get();
+            if (existing.size >= 5) {
+                return res.status(403).json({ success: false, message: 'Free üyelikte hata defterine en fazla 5 soru eklenebilir. Premium\'a geçerek sınırsız ekleyebilirsin.' });
+            }
+        }
+
+        const { question_text, ai_solution, image_base64 } = req.body;
+        const docRef = await db.collection('wrong_questions').add({
+            user_id: user.id,
+            question_text: question_text || 'Hatalı Soru Kaydı',
+            ai_solution: ai_solution || '',
+            image_base64: image_base64 || '',
+            tarih: new Date().toISOString()
+        });
+
+        res.json({ success: true, id: docRef.id });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Soru eklenemedi.' });
+    }
+});
+
+app.post('/api/delete-wrong-question', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const { questionId } = req.body;
+        if (!questionId) return res.status(400).json({ success: false, message: 'questionId gerekli.' });
+
+        const ref = db.collection('wrong_questions').doc(questionId);
+        const doc = await ref.get();
+        if (!doc.exists || doc.data().user_id !== user.id) {
+            return res.status(404).json({ success: false, message: 'Soru bulunamadı.' });
+        }
+
+        await ref.delete();
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Soru silinemedi.' });
+    }
+});
+
+// --- Öğrenci: Koçum & Ödevlerim ---
+app.get('/api/student-coach', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        let coach = {};
+        if (user.bagli_koc_kodu) {
+            const coachSnap = await db.collection('users')
+                .where('role', '==', 'teacher')
+                .where('koc_kodu', '==', user.bagli_koc_kodu)
+                .limit(1)
+                .get();
+            if (!coachSnap.empty) {
+                const c = coachSnap.docs[0].data();
+                coach = { ad: c.ad, email: c.email, kod: user.bagli_koc_kodu };
+            }
+        }
+
+        const hwSnap = await db.collection('homeworks').where('student_id', '==', user.id).get();
+        const homeworks = hwSnap.docs.map(d => {
+            const hw = d.data();
+            return {
+                id: d.id,
+                subject: hw.subject,
+                topic: Array.isArray(hw.topics) ? hw.topics.join(', ') : (hw.topics || ''),
+                exam_type: hw.exam_type,
+                completed: hw.completed === true || hw.status === 'completed'
+            };
+        }).sort((a, b) => new Date(b.date_assigned || 0) - new Date(a.date_assigned || 0));
+
+        res.json({ success: true, coach, homeworks });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Koç bilgisi alınamadı.' });
+    }
+});
+
+app.post('/api/connect-coach', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+        if (user.role !== 'student') return res.status(403).json({ success: false, message: 'Sadece öğrenciler koça bağlanabilir.' });
+
+        const girilenKod = String(req.body.coachCode || '').trim().toUpperCase();
+        if (!girilenKod) return res.status(400).json({ success: false, message: 'Koç kodu gerekli.' });
+
+        const snapshot = await db.collection('users').where('role', '==', 'teacher').where('koc_kodu', '==', girilenKod).get();
+        if (snapshot.empty) {
+            return res.status(404).json({ success: false, message: 'Geçersiz koç kodu.' });
+        }
+
+        const teacher = snapshot.docs[0].data();
+        const studentDocRef = db.collection('users').doc(user.id);
+
+        let kocKodlari = user.bagli_koc_kodlari || [];
+        let kocListesi = user.bagli_koc_listesi || [];
+
+        if (!kocKodlari.length && user.bagli_koc_kodu) {
+            kocKodlari.push(user.bagli_koc_kodu);
+            kocListesi.push({ kod: user.bagli_koc_kodu, ad: user.bagli_koc_ad || 'Eğitmen' });
+        }
+
+        if (!kocKodlari.includes(girilenKod)) {
+            kocKodlari.push(girilenKod);
+            kocListesi.push({ kod: girilenKod, ad: teacher.ad });
+        }
+
+        await studentDocRef.update({
+            bagli_koc_kodlari: kocKodlari,
+            bagli_koc_listesi: kocListesi,
+            bagli_koc_kodu: girilenKod,
+            bagli_koc_ad: teacher.ad
+        });
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Koç eşleştirmesi yapılamadı.' });
+    }
+});
+
+// NOT: Flutter bu uca sadece homeworkId + completed gönderiyor (sahibini
+// kanıtlayan bir kimlik göndermiyor). Bu yüzden bu uç, tıpkı diğer
+// mobil uçlar gibi, isteği gönderenin gerçekten o ödevin öğrencisi olduğunu
+// doğrulayamıyor. Daha sıkı bir yetkilendirme için Flutter tarafının
+// isteğe userId eklemesi ve burada ödevin student_id'siyle karşılaştırılması
+// gerekir.
+app.post('/api/update-homework', async (req, res) => {
+    try {
+        const { homeworkId, completed } = req.body;
+        if (!homeworkId) return res.status(400).json({ success: false, message: 'homeworkId gerekli.' });
+
+        await db.collection('homeworks').doc(homeworkId).update({
+            completed: !!completed,
+            status: completed ? 'completed' : 'pending'
+        });
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Ödev güncellenemedi.' });
+    }
+});
+
+// --- Şöhretler Salonu (Leaderboard) ---
+app.get('/api/leaderboard', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const snap = await db.collection('users').where('role', '==', 'student').get();
+        const leaderboard = snap.docs
+            .map(d => d.data())
+            .filter(u => Number(u.en_yuksek_net || 0) > 0)
+            .sort((a, b) => Number(b.en_yuksek_net) - Number(a.en_yuksek_net))
+            .slice(0, 100)
+            .map(u => ({ ad: u.ad, net: Number(u.en_yuksek_net).toFixed(2), is_premium: u.level === 'Premium' }));
+
+        res.json({ success: true, leaderboard, userLevel: user.level || 'Free' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Liderlik tablosu alınamadı.' });
+    }
+});
+
+app.post('/api/verify-optic-leaderboard', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const { image_base64 } = req.body;
+        if (!image_base64) return res.status(400).json({ success: false, message: 'Belge fotoğrafı gerekli.' });
+
+        const verifiedNet = await readNetFromOpticImage(image_base64);
+        if (verifiedNet === null) {
+            return res.status(503).json({
+                success: false,
+                message: 'Belge şu anda doğrulanamıyor (yapay zeka servisi yapılandırılmamış ya da belge okunamadı).'
+            });
+        }
+
+        const currentBest = Number(user.en_yuksek_net || 0);
+        if (verifiedNet > currentBest) {
+            await db.collection('users').doc(user.id).update({
+                en_yuksek_net: verifiedNet,
+                en_yuksek_net_tarih: new Date().toISOString()
+            });
+        }
+
+        res.json({ success: true, verified_net: (verifiedNet > currentBest ? verifiedNet : currentBest).toFixed(2) });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Belge doğrulanırken hata oluştu.' });
+    }
+});
+
+// --- Pomodoro ---
+app.post('/update-pomodoro', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const minutes = Number(req.body.minutes) || 0;
+        const newTotal = Number(user.pomodoro_dakika || 0) + minutes;
+
+        await db.collection('users').doc(user.id).update({ pomodoro_dakika: newTotal });
+        res.json({ success: true, total_minutes: newTotal });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Pomodoro kaydedilemedi.' });
+    }
+});
+
+// --- Şifre değiştirme (mobil profil ekranı) ---
+app.post('/api/change-password', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const { oldPassword, newPassword } = req.body;
+        if (!oldPassword || !newPassword) {
+            return res.status(400).json({ success: false, message: 'Mevcut ve yeni şifre gerekli.' });
+        }
+        if (String(newPassword).length < 6) {
+            return res.status(400).json({ success: false, message: 'Yeni şifre en az 6 karakter olmalı.' });
+        }
+        if (!verifyPassword(oldPassword, user.sifre)) {
+            return res.status(401).json({ success: false, message: 'Mevcut şifre hatalı.' });
+        }
+
+        await db.collection('users').doc(user.id).update({ sifre: hashPassword(newPassword) });
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Şifre değiştirilemedi.' });
+    }
+});
+
+// --- Premium'a yükseltme (mobil sahte ödeme ekranı, /payment-success'in mobil karşılığı) ---
+app.post('/upgrade-premium', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        await db.collection('users').doc(user.id).update({ level: 'Premium' });
+        if (req.session && req.session.userId === user.id) {
+            req.session.userLevel = 'Premium';
+        }
+
+        res.json({ success: true });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ success: false, message: 'Yükseltme işlemi tamamlanamadı.' });
     }
 });
 

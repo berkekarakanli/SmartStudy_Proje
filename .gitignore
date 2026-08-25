@@ -65,5 +65,9 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Firebase Admin SDK servis hesabı anahtarı - ASLA commit edilmemeli.
+# Render'da bu değerler ortam değişkeni olarak tanımlanmalı.
+serviceAccountKey.json
+
 # dataconnect generated files
 .dataconnect
