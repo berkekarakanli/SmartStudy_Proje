@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartStudy | Akademik Erişim Portalı</title>
+
+    <!-- FONTLAR VE IKONLAR -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- BOOTSTRAP -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --student-color: #0dcaf0;
+            --student-bg: #03111f;
+            --student-gradient: linear-gradient(135deg, #0dcaf0 0%, #007bff 100%);
+            
+            --teacher-color: #ffc107;
+            --teacher-bg: #1f1403;
+            --teacher-gradient: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            background-color: #020617;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* ANA BÖLÜNMÜŞ KONTEYNER */
+        .split-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* ORTAK PANEL ÖZELLİKLERİ */
+        .panel {
+            flex: 1; 
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.7s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .split-container:hover .panel {
+            filter: brightness(0.4); 
+        }
+        
+        .split-container .panel:hover {
+            flex: 1.6; 
+            filter: brightness(1); 
+        }
+
+        /* SOL PANEL (ÖĞRENCİ) */
+        .student-panel {
+            background-color: var(--student-bg);
+            border-right: 2px solid rgba(13, 202, 240, 0.2);
+            box-shadow: inset -50px 0 100px rgba(0,0,0,0.5);
+        }
+        .student-panel::before {
+            content: ''; position: absolute; width: 300px; height: 300px;
+            background: radial-gradient(circle, rgba(13, 202, 240, 0.1) 0%, transparent 70%);
+            top: 10%; left: 10%; border-radius: 50%;
+        }
+
+        /* SAĞ PANEL (ÖĞRETMEN) */
+        .teacher-panel {
+            background-color: var(--teacher-bg);
+            box-shadow: inset 50px 0 100px rgba(0,0,0,0.5);
+        }
+        .teacher-panel::before {
+            content: ''; position: absolute; width: 300px; height: 300px;
+            background: radial-gradient(circle, rgba(255, 193, 7, 0.1) 0%, transparent 70%);
+            bottom: 10%; right: 10%; border-radius: 50%;
+        }
+
+        /* ========================================== */
+        /* HARİKA ANİMASYONLAR BURADA BAŞLIYOR        */
+        /* ========================================== */
+
+        /* 1. Formun Havada Yüzme / Sekme Animasyonu */
+        @keyframes floatEffect {
+            0%, 100% { transform: scale(1.05) translateY(0); }
+            50% { transform: scale(1.05) translateY(-15px); }
+        }
+
+        .form-box {
+            z-index: 2;
+            width: 100%;
+            max-width: 340px;
+            padding: 40px;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(15px);
+            border-radius: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.5s ease;
+        }
+
+        .panel:hover .form-box {
+            animation: floatEffect 2.5s ease-in-out infinite; 
+            box-shadow: 0 30px 60px rgba(0,0,0,0.6);
+        }
+
+        /* 2. SPIDERMAN EFEKTİ (Öğrenci Tarafı Tavandan İnme) */
+        .spiderman-drop {
+            position: absolute;
+            top: -250px; /* Başlangıçta tavanda gizli */
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            /* Bounce (sekmeli) inme efekti */
+            transition: top 0.7s cubic-bezier(0.68, -0.55, 0.26, 1.55);
+            z-index: 20;
+        }
+        
+        .spiderman-drop .web-line {
+            width: 2px;
+            height: 180px;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(255,255,255,0.8));
+        }
+        
+        .spiderman-drop i {
+            font-size: 3.5rem;
+            color: #dc3545; /* Kırmızı Hero Rengi */
+            transform: rotate(180deg); /* Baş aşağı duruş */
+            filter: drop-shadow(0 0 15px rgba(220, 53, 69, 0.8));
+        }
+
+        .student-panel:hover .spiderman-drop {
+            top: 0; /* Hover olunca aşağı iner */
+        }
+
+        /* 3. PARLAYAN AMPUL EFEKTİ (Öğretmen Tarafı Sarkaç Animasyonu) */
+        .bulb-drop {
+            position: absolute;
+            top: -250px; /* Başlangıçta tavanda gizli */
+            left: 50%;
+            margin-left: -1.5rem; /* İkonu tam ortalamak için */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: top 0.7s cubic-bezier(0.68, -0.55, 0.26, 1.55);
+            z-index: 20;
+            transform-origin: top center;
+        }
+        
+        .bulb-drop .wire-line {
+            width: 3px;
+            height: 150px;
+            background: #444;
+        }
+        
+        .bulb-drop i {
+            font-size: 3rem;
+            color: var(--teacher-color);
+            filter: drop-shadow(0 0 20px var(--teacher-color));
+        }
+
+        /* Ampulün sağa sola sallanması */
+        @keyframes swing {
+            from { transform: rotate(-15deg); }
+            to { transform: rotate(15deg); }
+        }
+
+        .teacher-panel:hover .bulb-drop {
+            top: 0;
+            animation: swing 2s ease-in-out infinite alternate;
+        }
+
+        /* İNPUT VE BUTON STİLLERİ */
+        .space-input {
+            background: rgba(2, 6, 23, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 12px 15px;
+            border-radius: 12px;
+            transition: 0.3s;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        .space-input::placeholder { color: #64748b; font-size: 0.85rem; }
+        
+        .s-input:focus { border-color: var(--student-color); box-shadow: 0 0 15px rgba(13, 202, 240, 0.3); outline: none; }
+        .t-input:focus { border-color: var(--teacher-color); box-shadow: 0 0 15px rgba(255, 193, 7, 0.3); outline: none; }
+
+        .btn-access {
+            border: none;
+            color: #000;
+            font-weight: 800;
+            padding: 14px;
+            border-radius: 12px;
+            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: 0.4s;
+            cursor: pointer;
+        }
+        .btn-s { background: var(--student-gradient); }
+        .btn-s:hover { box-shadow: 0 10px 25px rgba(13, 202, 240, 0.5); }
+        
+        .btn-t { background: var(--teacher-gradient); }
+        .btn-t:hover { box-shadow: 0 10px 25px rgba(255, 193, 7, 0.5); }
+
+        /* YÜZEYDE UÇAN KAYIT BUTONU */
+        .floating-footer {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 12px 30px;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
+        }
+        .floating-footer a {
+            color: #f8fafc;
+            text-decoration: none;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            transition: 0.3s;
+        }
+        .floating-footer a:hover {
+            color: var(--student-color);
+        }
+
+    </style>
+</head>
+
+<body>
+
+    <div class="split-container">
+        
+        <!-- ========================================== -->
+        <!-- SOL PANEL: ÖĞRENCİ -->
+        <!-- ========================================== -->
+        <div class="panel student-panel">
+            
+            <!-- SPIDERMAN İNİŞ EFEKTİ -->
+            <div class="spiderman-drop">
+                <div class="web-line"></div>
+                <i class="fas fa-spider"></i> <!-- Baş aşağı duran örümcek -->
+            </div>
+
+            <div class="form-box">
+                <div class="text-center mb-4">
+                    <i class="fas fa-user-astronaut fa-3x mb-3" style="color: var(--student-color); filter: drop-shadow(0 0 10px rgba(13,202,240,0.5));"></i>
+                    <h3 class="orbitron fw-bold m-0" style="color: var(--student-color); letter-spacing: 3px;">ÖĞRENCİ</h3>
+                    <p class="text-secondary small mt-1">Yapay Zeka Destekli Analiz Modülü</p>
+                </div>
+
+                <form onsubmit="handleLogin(event, 'student', 's_email', 's_sifre')">
+                    <input type="email" id="s_email" class="space-input s-input" placeholder="Öğrenci E-Posta Adresi" required>
+                    <input type="password" id="s_sifre" class="space-input s-input" placeholder="Analiz Anahtarı (Şifre)" required>
+                    <button type="submit" class="btn-access btn-s orbitron" id="btn-student">Öğrenci Olarak Gir</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- SAĞ PANEL: ÖĞRETMEN -->
+        <!-- ========================================== -->
+        <div class="panel teacher-panel">
+
+            <!-- PARLAYAN AMPUL EFEKTİ -->
+            <div class="bulb-drop">
+                <div class="wire-line"></div>
+                <i class="fas fa-lightbulb"></i>
+            </div>
+
+            <div class="form-box">
+                <div class="text-center mb-4">
+                    <i class="fas fa-chess-king fa-3x mb-3" style="color: var(--teacher-color); filter: drop-shadow(0 0 10px rgba(255,193,7,0.5));"></i>
+                    <h3 class="orbitron fw-bold m-0" style="color: var(--teacher-color); letter-spacing: 3px;">ÖĞRETMEN</h3>
+                    <p class="text-secondary small mt-1">Eğitim Koçu ve Ödevlendirme Portalı</p>
+                </div>
+
+                <form onsubmit="handleLogin(event, 'teacher', 't_email', 't_sifre')">
+                    <input type="email" id="t_email" class="space-input t-input" placeholder="Eğitmen E-Posta Adresi" required>
+                    <input type="password" id="t_sifre" class="space-input t-input" placeholder="Yönetici Anahtarı (Şifre)" required>
+                    <button type="submit" class="btn-access btn-t orbitron" id="btn-teacher">Eğitmen Olarak Gir</button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ALT KISIMDA ORTADA DURAN KAYIT OLMA / GERİ DÖNME ALANI -->
+    <div class="floating-footer">
+        <a href="/register"><i class="fas fa-user-plus me-2"></i>Hesabınız yok mu? <b>Yeni Profil Oluştur</b></a>
+        <div style="width: 1px; height: 12px; background: rgba(255,255,255,0.3); display: inline-block; margin: 0 15px; vertical-align: middle;"></div>
+        <a href="/"><i class="fas fa-home"></i></a>
+    </div>
+
+    <script>
+        async function handleLogin(e, role, emailId, passId) {
+            e.preventDefault(); 
+
+            const email = document.getElementById(emailId).value;
+            const pass = document.getElementById(passId).value;
+            const btnId = role === 'student' ? 'btn-student' : 'btn-teacher';
+            const btn = document.getElementById(btnId);
+
+            if (email.trim() === "" || pass.trim() === "") {
+                alert("Hata: Kimlik doğrulama alanları boş bırakılamaz.");
+                return;
+            }
+            
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin me-2"></i>Sistem Doğrulanıyor...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email, sifre: pass, requestedRole: role })
+                });
+
+                // Sunucudan gelen yanıtı hata durumunda bile JSON olarak okumaya çalışıyoruz
+                let data;
+                try {
+                    data = await response.json();
+                } catch (err) {
+                    data = { success: false, message: "Sunucu yanıtı işlenemedi." };
+                }
+
+                if (response.ok && data.success) {
+                    localStorage.setItem('userRole', role); 
+                    window.location.href = '/dashboard'; 
+                } else {
+                    // Artık sunucudan gelen gerçek hatayı (Örn: Şifre hatalı) ekranda net göreceksin
+                    alert(data.message || "E-Posta veya Şifre Hatalı.");
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                console.error("Giriş hatası:", error);
+                alert("Sunucuya bağlanılamadı. Lütfen terminalde node server.js komutunun çalıştığından emin olun.");
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+    </script>
+
+</body>
+</html>

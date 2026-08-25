@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartStudy | Stratejik Veri Giriş ve Koçluk Terminali</title>
+
+    <!-- FONTLAR VE IKONLAR -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- BOOTSTRAP -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-deep: #020617;
+            --card-glass: rgba(30, 41, 59, 0.7);
+            --accent-blue: #0dcaf0;
+            --input-bg: rgba(15, 23, 42, 0.9);
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            margin: 0;
+            padding-bottom: 50px;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        .navbar {
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(13, 202, 240, 0.2);
+            padding: 1rem 2rem;
+            margin-bottom: 50px;
+        }
+
+        .terminal-card {
+            background: var(--card-glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(13, 202, 240, 0.2);
+            border-radius: 25px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.8s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .input-group-text {
+            background: var(--input-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--accent-blue);
+            border-right: none;
+            border-radius: 12px 0 0 12px;
+        }
+
+        .space-input {
+            background: var(--input-bg) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white !important;
+            padding: 12px;
+            border-radius: 0 12px 12px 0;
+            transition: 0.3s;
+        }
+
+        .space-input:focus {
+            background: #1e293b !important;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 15px rgba(13, 202, 240, 0.2);
+            outline: none;
+        }
+
+        /* Kilitli/Disabled inputlar için karanlık tema uyumu */
+        .space-input:disabled {
+            background: rgba(15, 23, 42, 0.95) !important;
+            color: #0dcaf0 !important;
+            opacity: 1;
+            border-color: rgba(13, 202, 240, 0.3);
+            -webkit-text-fill-color: #0dcaf0;
+        }
+
+        select.space-input option {
+            background: #0f172a;
+            color: white;
+        }
+
+        .input-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .btn-analyze {
+            background: linear-gradient(45deg, #0dcaf0, #007bff);
+            border: none;
+            color: #000;
+            font-weight: 800;
+            padding: 18px;
+            border-radius: 15px;
+            width: 100%;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            transition: 0.4s;
+            margin-top: 20px;
+            font-size: 1rem;
+        }
+
+        .btn-analyze:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(13, 202, 240, 0.4);
+            color: #000;
+        }
+
+        .max-info {
+            font-size: 0.65rem;
+            color: #64748b;
+            float: right;
+            margin-top: 5px;
+        }
+
+        .topic-checkbox {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(13, 202, 240, 0.2);
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .topic-checkbox:hover {
+            background: rgba(13, 202, 240, 0.1);
+        }
+        .topic-checkbox input {
+            margin-right: 15px;
+            accent-color: #0dcaf0;
+            transform: scale(1.2);
+        }
+
+        /* Özel Karanlık Tema Kaydırma Çubuğu (Scrollbar) */
+        #teacher-topics-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        #teacher-topics-container::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 4px;
+        }
+        #teacher-topics-container::-webkit-scrollbar-thumb {
+            background: rgba(13, 202, 240, 0.4);
+            border-radius: 4px;
+        }
+        #teacher-topics-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(13, 202, 240, 0.7);
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav class="navbar navbar-expand-lg">
+        <div class="container">
+            <a class="navbar-brand orbitron fw-bold text-info" href="/dashboard">
+                <i class="fas fa-microchip me-2"></i>SMARTSTUDY
+            </a>
+            <div class="ms-auto">
+                <a href="/dashboard" class="btn btn-outline-info orbitron" style="font-size: 0.7rem; border-radius: 10px;">
+                    <i class="fas fa-th-large me-2"></i>KONTROL PANELİ
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 900px;">
+        
+        <!-- ÖĞRENCİ BÖLÜMÜ -->
+        <div id="student-section" style="display: none;">
+            <div class="text-center mb-5">
+                <h2 class="orbitron fw-bold" style="letter-spacing: 4px;">VERİ GİRİŞ TERMİNALİ</h2>
+                <p class="text-secondary">Sınav Parametrelerinizi Analiz Motoruna Aktarın</p>
+            </div>
+
+            <div class="terminal-card mb-4" style="padding: 20px 40px;">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="input-label text-info"><i class="fas fa-tasks me-2"></i>Hedef Sınav Modülü</label>
+                        <select id="exam-type" class="form-control space-input" onchange="updateExamUI()">
+                            <option value="TYT">YKS - TYT (Temel Yeterlilik)</option>
+                            <option value="AYT">YKS - AYT (Alan Yeterlilik)</option>
+                            <option value="KPSS">KPSS Lisans (GY-GK)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6" id="ayt-category-container" style="display: none;">
+                        <label class="input-label text-warning"><i class="fas fa-layer-group me-2"></i>AYT Alan Seçimi</label>
+                        <select id="ayt-category" class="form-control space-input" onchange="updateExamUI()">
+                            <option value="SAY">Sayısal (SAY)</option>
+                            <option value="EA">Eşit Ağırlık (EA)</option>
+                            <option value="SOZ">Sözel (SÖZ)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="terminal-card">
+                <form action="/generate-plan" method="POST" onsubmit="return validateStudentMission()">
+                    <input type="hidden" name="sinav_turu" id="s_sinav_turu" value="TYT">
+                    <input type="hidden" name="role" value="student">
+                    <div id="student-dynamic-inputs" class="row g-4"></div>
+                    <button type="submit" class="btn btn-analyze orbitron">
+                        <i class="fas fa-sync fa-spin me-2 d-none" id="loader-student"></i>Analizi Başlat ve Raporla
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- ÖĞRETMEN BÖLÜMÜ -->
+        <div id="teacher-section" style="display: none;">
+            <div class="text-center mb-5">
+                <h2 class="orbitron fw-bold text-warning" style="letter-spacing: 4px;">EĞİTİM KOÇU TERMİNALİ</h2>
+                <p class="text-secondary">Sadece Sizinle Eşleşen Öğrencilerinize Spesifik Konu Ödevlendirmeleri Yapın</p>
+            </div>
+
+            <div class="terminal-card">
+                <form action="/assign-homework" method="POST" onsubmit="return validateTeacherMission()">
+                    <input type="hidden" name="role" value="teacher">
+                    <input type="hidden" name="subject" id="hidden-subject" value="">
+                    
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-12">
+                            <label class="input-label text-info"><i class="fas fa-user-graduate me-2"></i>Bağlı Öğrencileriniz</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                <select id="teacher-student-select" name="student_id" class="form-control space-input" required>
+                                    <option value="">Yükleniyor...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="input-label text-warning"><i class="fas fa-tasks me-2"></i>Müfredat / Sınav</label>
+                            <select id="teacher-exam" name="exam_type" class="form-control space-input" onchange="updateTeacherSubjects()">
+                                <option value="TYT">YKS - TYT</option>
+                                <option value="AYT">YKS - AYT</option>
+                                <option value="KPSS">KPSS Lisans</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="input-label text-success"><i class="fas fa-book me-2"></i>İlgili Branş (Ders)</label>
+                            <select id="teacher-subject" class="form-control space-input" onchange="updateTeacherTopics()">
+                            </select>
+                        </div>
+
+                        <div class="col-md-12">
+                            <hr class="my-3" style="border-color: rgba(255,255,255,0.1);">
+                            <label class="input-label text-danger"><i class="fas fa-list-check me-2"></i>Ödevlendirilecek Konular</label>
+                            <div id="teacher-topics-container" class="p-3" style="background: var(--input-bg); border-radius: 12px; max-height: 300px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1);">
+                            </div>
+                            <small class="text-secondary mt-2 d-block">* Birden fazla konu seçebilirsiniz.</small>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="teacher-submit-btn" class="btn btn-analyze orbitron mt-2" style="background: linear-gradient(45deg, #ffc107, #fd7e14);">
+                        <i class="fas fa-paper-plane me-2 d-none" id="loader-teacher"></i>Seçili Konuları Öğrenciye Ata
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let teacherData = { teacher_type: 'koc', branch: '', students: [] };
+
+        const studentExamData = {
+            'TYT': [
+                { id: 'mat', label: 'Matematik', max: 40, icon: 'fa-calculator' },
+                { id: 'turkce', label: 'Türkçe', max: 40, icon: 'fa-language' },
+                { id: 'fen', label: 'Fen Bilimleri', max: 20, icon: 'fa-flask' },
+                { id: 'sosyal', label: 'Sosyal Bilimler', max: 20, icon: 'fa-globe-europe' }
+            ],
+            'AYT_SAY': [
+                { id: 'mat', label: 'Matematik', max: 40, icon: 'fa-calculator' },
+                { id: 'fizik', label: 'Fizik', max: 14, icon: 'fa-atom' },
+                { id: 'kimya', label: 'Kimya', max: 13, icon: 'fa-flask' },
+                { id: 'biyoloji', label: 'Biyoloji', max: 13, icon: 'fa-dna' }
+            ],
+            'AYT_EA': [
+                { id: 'mat', label: 'Matematik', max: 40, icon: 'fa-calculator' },
+                { id: 'edebiyat', label: 'Türkçe / Türk Dili ve Edebiyatı', max: 24, icon: 'fa-book' },
+                { id: 'tarih1', label: 'Tarih-1', max: 10, icon: 'fa-landmark' },
+                { id: 'cografya1', label: 'Coğrafya-1', max: 6, icon: 'fa-map' }
+            ],
+            'AYT_SOZ': [
+                { id: 'edebiyat', label: 'Türkçe / Türk Dili ve Edebiyatı', max: 24, icon: 'fa-book' },
+                { id: 'tarih1', label: 'Tarih-1', max: 10, icon: 'fa-landmark' },
+                { id: 'cografya1', label: 'Coğrafya-1', max: 6, icon: 'fa-map' },
+                { id: 'tarih2', label: 'Tarih-2', max: 11, icon: 'fa-landmark' },
+                { id: 'cografya2', label: 'Coğrafya-2', max: 11, icon: 'fa-map' },
+                { id: 'felsefe', label: 'Felsefe Grubu', max: 12, icon: 'fa-brain' },
+                { id: 'din', label: 'Din/Ek Felsefe', max: 6, icon: 'fa-hands' }
+            ],
+            'KPSS': [
+                { id: 'k_turkce', label: 'Türkçe', max: 30, icon: 'fa-language' },
+                { id: 'k_mat', label: 'Matematik', max: 30, icon: 'fa-calculator' },
+                { id: 'k_tarih', label: 'Tarih', max: 27, icon: 'fa-landmark' },
+                { id: 'k_cografya', label: 'Coğrafya', max: 18, icon: 'fa-map' },
+                { id: 'k_vat', label: 'Vatandaşlık', max: 9, icon: 'fa-balance-scale' },
+                { id: 'k_guncel', label: 'Güncel Olaylar', max: 6, icon: 'fa-newspaper' }
+            ]
+        };
+
+        const teacherSyllabus = {
+            'TYT': {
+                'Türkçe / Türk Dili ve Edebiyatı': [
+                    'Sözcükte Anlam', 'Cümlede Anlam', 'Paragrafta Anlam', 'Anlatım Biçimleri ve Düşünceyi Geliştirme Yolları', 
+                    'Ses Bilgisi', 'Yazım Kuralları', 'Noktalama İşaretleri', 'Sözcükte Yapı ve Ekler', 
+                    'Sözcük Türleri (İsim, Sıfat, Zamir, Zarf, Edat, Bağlaç, Ünlem)', 'Fiiller ve Fiilimsiler', 
+                    'Ek Fiil ve Fiilde Çatı', 'Cümlenin Öğeleri', 'Cümle Türleri', 'Anlatım Bozuklukları'
+                ],
+                'Matematik': [
+                    'Temel Kavramlar', 'Sayı Basamakları', 'Bölme ve Bölünebilme', 'EBOB - EKOK', 'Rasyonel ve Ondalık Sayılar', 
+                    'Basit Eşitsizlikler', 'Mutlak Değer', 'Üslü Sayılar', 'Köklü Sayılar', 'Çarpanlara Ayırma ve Özdeşlikler', 
+                    'Oran ve Orantı', 'Denklem Çözme', 'Problemler (Sayı, Kesir, Yaş, İşçi, Hareket, Yüzde-Kâr-Zarar, Karışım)', 
+                    'Kümeler ve Kartezyen Çarpım', 'Mantık', 'Fonksiyonlar', 'Polinomlar', 'Permütasyon', 'Kombinasyon', 'Binom', 'Olasılık', 'İstatistik'
+                ],
+                'Geometri': [
+                    'Doğruda ve Üçgende Açılar', 'Özel Üçgenler (Dik, İkizkenar, Eşkenar)', 'Üçgende Açı-Kenar Bağıntıları', 
+                    'Üçgende Yardımcı Elemanlar (Açıortay, Kenarortay, Yükseklik)', 'Üçgende Benzerlik', 'Üçgende Alan', 
+                    'Çokgenler', 'Dörtgenler (Paralelkenar, Eşkenar Dörtgen, Dikdörtgen, Kare, Yamuk, Deltoit)', 
+                    'Çember ve Daire', 'Analitik Geometri (Nokta ve Doğru Analitiği)', 'Katı Cisimler (Prizma, Silindir, Piramit, Koni, Küre)'
+                ],
+                'Tarih': [
+                    'Tarih Bilimi', 'İlk Çağ Uygarlıkları', 'İlk Türk Devletleri', 'İslam Tarihi ve Uygarlığı', 'Türk - İslam Devletleri', 
+                    'Osmanlı Devleti Kuruluş ve Yükselme', 'Osmanlı Kültür ve Medeniyeti', '17. ve 18. Yüzyılda Osmanlı', '19. Yüzyılda Osmanlı', 
+                    'I. Dünya Savaşı ve Mondros', 'Milli Mücadele Hazırlık Dönemi', 'Kurtuluş Savaşı Cepheleri', 'Türk İnkılabı ve Atatürk İlkeleri', 'Atatürk Dönemi Türk Dış Politikası'
+                ],
+                'Coğrafya': [
+                    'Doğa ve İnsan', 'Dünyanın Şekli ve Hareketleri', 'Coğrafi Konum', 'Harita Bilgisi', 'Atmosfer ve İklim', 
+                    'Sıcaklık, Basınç ve Rüzgarlar', 'Nem, Yağış ve İklim Tipleri', 'Türkiye\'nin İklimi', 'İç Kuvvetler ve Dış Kuvvetler', 
+                    'Su Kaynakları, Topraklar ve Bitki Örtüsü', 'Nüfus, Göç ve Yerleşme', 'Türkiye\'nin Nüfusu ve Yerleşmesi', 'Ekonomik Faaliyetler, Bölgeler ve Çevre (Afetler)'
+                ],
+                'Fizik': [
+                    'Fizik Bilimine Giriş', 'Madde ve Özellikleri', 'Kuvvet ve Hareket (Kinematik ve Dinamik)', 'İş, Güç ve Enerji', 
+                    'Isı, Sıcaklık ve Genleşme', 'Basınç ve Kaldırma Kuvveti', 'Elektrik (Elektrostatik, Akım, Devreler)', 'Manyetizma', 
+                    'Dalgalar (Yay, Su, Ses, Deprem)', 'Optik (Aydınlanma, Gölge, Yansıma, Kırılma, Aynalar, Mercekler)'
+                ],
+                'Kimya': [
+                    'Kimya Bilimi ve Güvenlik', 'Atom ve Periyodik Sistem', 'Kimyasal Türler Arası Etkileşimler', 'Maddenin Halleri (Katı, Sıvı, Gaz)', 
+                    'Doğa ve Kimya', 'Kimyanın Temel Kanunları ve Mol Kavramı', 'Kimyasal Hesaplamalar', 'Karışımlar', 'Asitler, Bazlar ve Tuzlar', 'Kimya Her Yerde'
+                ],
+                'Biyoloji': [
+                    'Yaşam Bilimi Biyoloji (Canlıların Ortak Özellikleri ve Temel Bileşenler)', 'Hücre (Yapısı, Organelleri ve Madde Geçişleri)', 
+                    'Canlılar Dünyası (Sınıflandırma)', 'Hücre Bölünmeleri (Mitoz ve Mayoz) ile Üreme', 'Kalıtımın Genel İlkeleri ve Soyağaçları', 'Ekosistem Ekolojisi ve Çevre Sorunları'
+                ]
+            },
+            'AYT': {
+                'Türkçe / Türk Dili ve Edebiyatı': [
+                    'Anlam Bilgisi ve Paragraf', 'Dil Bilgisi (Yazım, Noktalama, Ses, Yapı, Cümle)', 
+                    'Şiir Bilgisi (Ölçü, Uyak, Redif, Söz Sanatları)', 'İslamiyet Öncesi ve Geçiş Dönemi Türk Edebiyatı', 
+                    'Halk Edebiyatı (Aşık, Anonim, Tasavvuf)', 'Divan Edebiyatı (Nazım Şekilleri, Sanatçılar, Eserler)', 
+                    'Tanzimat Edebiyatı', 'Servet-i Fünun ve Fecr-i Âti', 'Milli Edebiyat Dönemi', 
+                    'Cumhuriyet Dönemi Türk Şiiri', 'Cumhuriyet Dönemi Türk Nesri (Roman, Öykü, Tiyatro, Deneme)', 'Edebi Akımlar'
+                ],
+                'Matematik': [
+                    'Temel Kavramlar ve Sayılar', 'Polinomlar', 'İkinci Dereceden Denklemler', 'Karmaşık Sayılar', 
+                    'Parabol', 'Eşitsizlikler', 'Trigonometri', 'Logaritma', 'Diziler', 'Limit ve Süreklilik', 'Türev ve Uygulamaları', 'İntegral ve Uygulamaları'
+                ],
+                'Geometri': [
+                    'Üçgenler', 'Dörtgenler ve Çokgenler', 'Çember ve Daire', 'Trigonometri Geometrisi', 
+                    'Analitik Geometri (Doğru ve Çemberin Analitiği)', 'Katı Cisimler', 'Vektörler', 'Dönüşüm Geometrisi'
+                ],
+                'Fizik': [
+                    'Vektörler ve Bağıl Hareket', 'Newton\'un Hareket Yasaları ve Atışlar', 'İş, Güç, Enerji II ve Momentum', 
+                    'Tork, Denge ve Basit Makineler', 'Elektrik Alan, Potansiyel ve Sığaçlar', 'Elektrik Akımı, Manyetizma ve Transformatörler', 
+                    'Çembersel ve Basit Harmonik Hareket', 'Dalga Mekaniği (Girişim, Kırınım, Doppler)', 'Modern Fizik (Kuantum, Radyoaktivite, Özel Görelilik)'
+                ],
+                'Kimya': [
+                    'Kimyasal Hesaplamalar ve Mol', 'Modern Atom Teorisi (Kuantum Modeli)', 'Gazlar', 
+                    'Sıvı Çözeltiler ve Koligatif Özellikler', 'Kimyasal Tepkimelerde Enerji (Entalpi)', 'Kimyasal Tepkimelerde Hız ve Denge', 
+                    'Asit-Baz ve Çözünürlük Dengesi (KÇÇ)', 'Elektrokimya (Pil ve Elektroliz)', 'Organik Kimyaya Giriş (Hidrokarbonlar ve Fonksiyonel Gruplar)'
+                ],
+                'Biyoloji': [
+                    'Sinir, Endokrin Sistem ve Duyu Organları', 'Destek, Hareket, Sindirim ve Dolaşım Sistemleri', 
+                    'Solunum, Boşaltım ve Üreme Sistemleri', 'Komünite ve Popülasyon Ekolojisi', 'Nükleik Asitler (DNA/RNA) ve Protein Sentezi', 
+                    'Fotosentez, Kemosentez ve Hücresel Solunum', 'Bitki Biyolojisi (Yapı, Taşınma, Üreme)', 'Canlılarda Evrim ve Biyoteknoloji'
+                ],
+                'Tarih': [
+                    'Tarih Bilimi ve Tarih Yazıcılığı', 'Dünya Tarihi (İlk Çağ\'dan Orta Çağ\'a)', 'Türkistan ve İlk Türk Devletleri', 
+                    'İslamiyet\'in Doğuşu ve İlk Türk-İslam Devletleri', 'Orta Çağ ve Yeni Çağ\'da Avrupa', 'Osmanlı Devleti Siyasi ve Kültürel Gelişmeleri', 
+                    'XIX. Yüzyıl ve XX. Yüzyıl Başlarında Osmanlı', 'I. Dünya Savaşı ve Sonrası Gelişmeler', 'Milli Mücadele ve Kurtuluş Savaşı', 
+                    'Atatürkçülük ve Türk İnkılabı', 'İki Savaş Arası Dönem (1920-1939)', 'II. Dünya Savaşı ve Soğuk Savaş Dönemi', 'Küreselleşen Dünya ve 21. Yüzyıl'
+                ],
+                'Coğrafya': [
+                    'Ekosistemler ve Madde Döngüleri', 'Biyomlar ve Habitat', 'Nüfus Politikaları ve Türkiye\'de Nüfus', 
+                    'Yerleşmelerin Özellikleri ve Göçler', 'Ekonomik Faaliyetler ve Türkiye Ekonomisi (Tarım, Hayvancılık, Maden, Enerji)', 
+                    'Türkiye\'nin Ulaşım Sistemleri ve Ticaret', 'Kırsal ve Kentsel Yerleşmeler', 'Bölgeler ve Ülkeler (Jeopolitik Konum, Türkiye ve Dünya İlişkileri)', 
+                    'Çevre Sorunları, Küresel İklim Değişimi ve Doğal Afetler'
+                ],
+                'Felsefe Grubu': [
+                    'Felsefeye Giriş ve Bilgi Felsefesi', 'Varlık, Ahlak ve Din Felsefesi', 'Siyaset ve Sanat Felsefesi', 
+                    'Bilim Felsefesi ve Çağdaş Felsefe Akımları', 'Psikoloji Biliminin Temelleri ve Süreçleri', 
+                    'Öğrenme, Bellek, Düşünme ve Ruh Sağlığı', 'Sosyolojiye Giriş, Toplumsal Yapı ve Değişme', 'Mantık (Klasik Mantık, Sembolik Mantık)'
+                ]
+            },
+            'KPSS': {
+                'Türkçe / Türk Dili ve Edebiyatı': [
+                    'Sözcükte Anlam', 'Cümlede Anlam', 'Paragrafta Anlam ve Anlatım Teknikleri', 'Ses Bilgisi', 'Yazım Kuralları', 
+                    'Noktalama İşaretleri', 'Sözcükte Yapı', 'Sözcük Türleri (İsim, Sıfat, Zamir, Zarf, Edat, Bağlaç)', 
+                    'Cümlenin Öğeleri', 'Cümle Türleri', 'Anlatım Bozuklukları', 'Sözel Mantık ve Muhakeme'
+                ],
+                'Matematik': [
+                    'Temel Kavramlar', 'Sayı Basamakları', 'Bölme ve Bölünebilme', 'EBOB - EKOK', 'Rasyonel Sayılar', 
+                    'Basit Eşitsizlikler ve Mutlak Değer', 'Üslü ve Köklü Sayılar', 'Çarpanlara Ayırma', 'Oran - Orantı', 
+                    'Problemler (Sayı, Kesir, Yaş, İşçi, Hareket, Yüzde-Kâr-Zarar, Karışım)', 'Kümeler', 'Fonksiyonlar ve İşlem', 
+                    'Permütasyon, Kombinasyon, Olasılık', 'Tablo ve Grafik Yorumlama', 'Sayısal Mantık'
+                ],
+                'Tarih': [
+                    'İslamiyet Öncesi Türk Tarihi', 'İlk Türk - İslam Devletleri', 'Osmanlı Devleti Siyasi Tarihi (Kuruluş, Yükselme, Duraklama, Dağılma)', 
+                    'Osmanlı Devleti\'nde Kültür ve Medeniyet', '19. Yüzyıl Osmanlı Islahatları ve Olayları', 'XX. Yüzyılda Osmanlı Devleti', 
+                    'Milli Mücadele Hazırlık Dönemi (Kongreler)', 'Kurtuluş Savaşı Cepheleri (İstiklal Savaşı)', 'Türk İnkılabı ve Atatürk İlkeleri', 
+                    'Atatürk Dönemi İç ve Dış Politika', 'Çağdaş Türk ve Dünya Tarihi'
+                ],
+                'Coğrafya': [
+                    'Türkiye\'nin Coğrafi Konumu (Fiziki, Beşeri, Özel)', 'Türkiye\'nin Yer Şekilleri ve Dağları', 'Türkiye\'nin Akarsuları ve Gölleri', 
+                    'Türkiye\'nin İklimi ve Bitki Örtüsü', 'Türkiye\'de Toprak Tipleri ve Afetler', 'Türkiye\'nin Nüfusu ve Yerleşme Özellikleri', 
+                    'Türkiye\'nin Ekonomik Coğrafyası (Tarım, Hayvancılık, Madenler, Sanayi, Ulaşım)', 'Türkiye\'nin Turizmi ve Bölgeler Coğrafyası'
+                ],
+                'Vatandaşlık': [
+                    'Hukukun Temel Kavramları', 'Devlet Teşkilatı ve Hükûmet Sistemleri', 'Anayasa Hukukuna Giriş (1982 Anayasası)', 
+                    'Yasama Organı (TBMM)', 'Yürütme Organı (Cumhurbaşkanlığı)', 'Yargı Organı (Yüksek Mahkemeler)', 
+                    'İdare Hukuku', 'Temel Hak ve Hürriyetler'
+                ],
+                'Güncel Olaylar': [
+                    'Ulusal ve Uluslararası Kuruluşlar', 'Türkiye\'nin Üye Olduğu Önemli Kuruluşlar', 
+                    'Bilim, Sanat, Kültür ve Spor Alanındaki Gelişmeler', 'Güncel Bilgiler ve Siyasi Olaylar'
+                ]
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', async function() {
+            const userRole = localStorage.getItem('userRole') || 'student'; 
+            if (userRole === 'teacher') {
+                document.getElementById('student-section').style.display = 'none';
+                document.getElementById('teacher-section').style.display = 'block';
+
+                try {
+                    const res = await fetch('/api/teacher-data');
+                    const data = await res.json();
+                    if (data.success) {
+                        teacherData = data;
+                        
+                        const sSelect = document.getElementById('teacher-student-select');
+                        if (teacherData.students.length > 0) {
+                            sSelect.innerHTML = '<option value="">Eşleşen Öğrenciyi Seçin...</option>' + 
+                                teacherData.students.map(s => `<option value="${s.id}">${s.ad} (${s.email})</option>`).join('');
+                        } else {
+                            sSelect.innerHTML = '<option value="">Eşleşen öğrenciniz bulunmuyor</option>';
+                            document.getElementById('teacher-submit-btn').disabled = true;
+                            document.getElementById('teacher-submit-btn').classList.add('opacity-50');
+                        }
+
+                        if (teacherData.teacher_type === 'brans') {
+                            const subSelect = document.getElementById('teacher-subject');
+                            subSelect.innerHTML = `<option value="${teacherData.branch}">${teacherData.branch}</option>`;
+                            subSelect.value = teacherData.branch;
+                            subSelect.disabled = true;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Öğretmen verisi yüklenemedi", e);
+                }
+
+                updateTeacherSubjects();
+            } else {
+                document.getElementById('student-section').style.display = 'block';
+                document.getElementById('teacher-section').style.display = 'none';
+                updateExamUI();
+            }
+        });
+
+        function updateExamUI() {
+            const examType = document.getElementById('exam-type').value;
+            const aytCatContainer = document.getElementById('ayt-category-container');
+            const aytCat = document.getElementById('ayt-category').value;
+            if (examType === 'AYT') aytCatContainer.style.display = 'block';
+            else aytCatContainer.style.display = 'none';
+
+            let currentData = studentExamData[examType === 'AYT' ? ('AYT_' + aytCat) : examType];
+            document.getElementById('s_sinav_turu').value = examType === 'AYT' ? ('AYT_' + aytCat) : examType;
+            renderStudentFields('student-dynamic-inputs', currentData);
+        }
+
+        function renderStudentFields(containerId, fields) {
+            const container = document.getElementById(containerId);
+            let html = '', totalMax = 0;
+            fields.forEach(f => {
+                totalMax += f.max;
+                html += `
+                <div class="col-md-6">
+                    <label class="input-label">${f.label}</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas ${f.icon}"></i></span>
+                        <input type="number" step="0.25" id="s_${f.id}" name="${f.id}" class="form-control space-input" placeholder="0.00" required>
+                    </div>
+                    <span class="max-info">Max: ${f.max} Net</span>
+                </div>`;
+            });
+            html += `
+            <div class="col-12">
+                <hr class="my-4" style="border-color: rgba(255,255,255,0.1);">
+                <label class="input-label">Stratejik Net Hedefi (Toplam)</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-bullseye"></i></span>
+                    <input type="number" step="0.25" id="s_hedef" name="hedef" class="form-control space-input" placeholder="Örn: ${Math.floor(totalMax * 0.75)}" required>
+                </div>
+                <span class="max-info">Maksimum Sınır: ${totalMax} Net</span>
+                <input type="hidden" id="s_max_limit" value="${totalMax}">
+            </div>`;
+            container.innerHTML = html;
+        }
+
+        function validateStudentMission() {
+            const hedef = parseFloat(document.getElementById('s_hedef').value);
+            const maxLimit = parseFloat(document.getElementById('s_max_limit').value);
+            if (hedef > maxLimit) {
+                alert(`Hata: Hedef net, maksimum sınır olan ${maxLimit} neti aşamaz.`);
+                return false;
+            }
+            document.getElementById('loader-student').classList.remove("d-none");
+            return true;
+        }
+
+        function updateTeacherSubjects() {
+            const exam = document.getElementById('teacher-exam').value;
+            const subjectSelect = document.getElementById('teacher-subject');
+            
+            if (teacherData.teacher_type === 'brans') {
+                subjectSelect.innerHTML = `<option value="${teacherData.branch}">${teacherData.branch}</option>`;
+                subjectSelect.value = teacherData.branch;
+                subjectSelect.disabled = true;
+            } else {
+                const subjects = Object.keys(teacherSyllabus[exam] || {});
+                subjectSelect.innerHTML = '';
+                subjectSelect.disabled = false;
+                subjects.forEach(sub => {
+                    const opt = document.createElement('option');
+                    opt.value = sub; opt.textContent = sub;
+                    subjectSelect.appendChild(opt);
+                });
+            }
+            updateTeacherTopics();
+        }
+
+        function updateTeacherTopics() {
+            const exam = document.getElementById('teacher-exam').value;
+            const subject = teacherData.teacher_type === 'brans' ? teacherData.branch : document.getElementById('teacher-subject').value;
+            const container = document.getElementById('teacher-topics-container');
+            container.innerHTML = '';
+            
+            if(teacherSyllabus[exam] && teacherSyllabus[exam][subject]) {
+                teacherSyllabus[exam][subject].forEach((topic, i) => {
+                    container.innerHTML += `
+                    <label class="topic-checkbox">
+                        <input type="checkbox" name="assigned_topics" value="${topic}">
+                        <span style="color: #f8fafc; font-size: 0.9rem;">${i + 1}. ${topic}</span>
+                    </label>`;
+                });
+            } else {
+                container.innerHTML = `<p class="text-secondary mb-0">Bu branşa ve sınava ait konu bulunamadı.</p>`;
+            }
+        }
+
+        function validateTeacherMission() {
+            document.getElementById('hidden-subject').value = (teacherData.teacher_type === 'brans') ? teacherData.branch : document.getElementById('teacher-subject').value;
+
+            if (document.querySelectorAll('input[name="assigned_topics"]:checked').length === 0) {
+                alert("Lütfen en az bir konu seçiniz.");
+                return false;
+            }
+            document.getElementById('loader-teacher').classList.remove("d-none");
+            return true;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartStudy | Akademik Performans ve Strateji</title>
+
+    <!-- FONTLAR VE IKONLAR -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- BOOTSTRAP -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-deep: #020617;
+            --card-glass: rgba(30, 41, 59, 0.7);
+            --accent-blue: #0dcaf0;
+            --text-main: #f8fafc;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: var(--text-main);
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+        }
+
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+
+        /* NAVBAR */
+        .navbar {
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(13, 202, 240, 0.2);
+            padding: 1rem 2rem;
+        }
+
+        .navbar-brand {
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            color: var(--accent-blue) !important;
+        }
+
+        /* HERO SECTION */
+        .hero {
+            background: radial-gradient(circle at 50% 50%, rgba(13, 202, 240, 0.1) 0%, var(--bg-deep) 100%);
+            padding: 150px 0 100px;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            text-shadow: 0 0 20px rgba(13, 202, 240, 0.4);
+            margin-bottom: 20px;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            max-width: 700px;
+            margin: 0 auto 30px;
+        }
+
+        /* GLASS CARD */
+        .glass-card {
+            background: var(--card-glass);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 2rem;
+            transition: all 0.4s ease;
+            height: 100%;
+        }
+
+        .glass-card:hover {
+            border-color: var(--accent-blue);
+            transform: translateY(-10px);
+            box-shadow: 0 0 30px rgba(13, 202, 240, 0.1);
+        }
+
+        /* BUTONLAR */
+        .btn-prime {
+            background: transparent;
+            border: 1px solid var(--accent-blue);
+            color: var(--accent-blue);
+            padding: 12px 35px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-prime:hover {
+            background: var(--accent-blue);
+            color: #000;
+            box-shadow: 0 0 20px var(--accent-blue);
+        }
+
+        /* COMPARISON SECTION */
+        .comparison {
+            background: rgba(13, 202, 240, 0.02);
+            padding: 100px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .check-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            color: #cbd5e1;
+        }
+
+        .check-item i {
+            margin-right: 15px;
+            color: var(--accent-blue);
+        }
+
+        /* FOOTER */
+        .footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.03);
+            padding: 60px 0;
+            background: #010409;
+        }
+        .premium-card-home {
+    background: linear-gradient(135deg, rgba(15,23,42,0.98), rgba(69,26,3,0.95));
+    border: 1px solid rgba(255,193,7,0.6);
+    border-radius: 20px;
+    padding: 2rem;
+    box-shadow: 0 0 35px rgba(255,193,7,0.12);
+}
+
+.premium-label {
+    display: inline-block;
+    background: #ffc107;
+    color: #020617;
+    font-weight: 800;
+    padding: 7px 15px;
+    border-radius: 50px;
+    margin-bottom: 20px;
+}
+
+.premium-card-home h3 {
+    color: #ffc107;
+    font-size: 2rem;
+    margin-bottom: 18px;
+}
+
+.premium-desc {
+    color: #cbd5e1;
+    line-height: 1.7;
+    margin-bottom: 20px;
+}
+
+.premium-list p {
+    color: #e2e8f0;
+    margin-bottom: 12px;
+}
+
+.premium-price {
+    color: #ffc107;
+    font-size: 3rem;
+    font-weight: 800;
+    margin: 25px 0;
+}
+
+.premium-price span {
+    font-size: 1rem;
+    color: #94a3b8;
+}
+
+.premium-home-btn {
+    display: block;
+    text-align: center;
+    background: #ffc107;
+    color: #020617;
+    padding: 15px;
+    border-radius: 14px;
+    font-weight: 800;
+    text-decoration: none;
+}
+
+.premium-home-btn:hover {
+    background: white;
+    color: #020617;
+}   
+.premium-card-home{
+    height:100%;
+}
+    </style>
+</head>
+
+<body>
+
+<!-- NAVBAR BÖLÜMÜNÜ ŞUNUNLA DEĞİŞTİR -->
+<nav class="navbar navbar-expand-lg fixed-top">
+    <div class="container">
+        <a class="navbar-brand orbitron fw-bold" href="/">
+            <i class="fas fa-brain me-2"></i>SMARTSTUDY
+        </a>
+        <div class="ms-auto d-flex">
+            <a href="/login" class="btn btn-outline-info orbitron me-3" style="padding: 8px 25px; font-size: 0.8rem;">GİRİŞ YAP</a>
+            <a href="/register" class="btn btn-info orbitron text-dark" style="padding: 8px 25px; font-size: 0.8rem;">KAYIT OL</a>
+        </div>
+    </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+    <div class="container">
+        <h1 class="orbitron neon-text">YAPAY ZEKA DESTEKLİ<br>AKADEMİK OPTİMİZASYON</h1>
+        <p>Gelişmiş veri analitiği ve bilişsel performans algoritmaları ile TYT/YKS sürecini bilimsel bir temele oturtun.</p>
+        <div class="mt-5">
+            <a href="/plan" class="btn-prime orbitron me-3">Analizi Başlat</a>
+            <a href="#features" class="btn btn-link text-secondary text-decoration-none small">Sistem Nasıl Çalışır?</a>
+        </div>
+    </div>
+</section>
+
+<!-- FEATURES -->
+<div id="features" class="container mb-5">
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="glass-card text-center">
+                <i class="fas fa-microchip fa-3x mb-4 text-info"></i>
+                <h4 class="orbitron h5">VERİ ANALİTİĞİ</h4>
+                <p class="small text-secondary">Net girdileriniz, 120 soruluk TYT matrisi üzerinden istatistiksel olarak analiz edilir.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="glass-card text-center">
+                <i class="fas fa-robot fa-3x mb-4 text-info"></i>
+                <h4 class="orbitron h5">AKILLI KOÇLUK</h4>
+                <p class="small text-secondary">AI motoru, akademik yeterlilik seviyenize göre kişiselleştirilmiş strateji raporları üretir.</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="glass-card text-center">
+                <i class="fas fa-chart-line fa-3x mb-4 text-info"></i>
+                <h4 class="orbitron h5">PERFORMANS TAKİBİ</h4>
+                <p class="small text-secondary">Zaman içindeki gelişim eğriniz kalıcı veritabanı (SQLite) üzerinde depolanır ve izlenir.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- COMPARISON -->
+<section class="comparison mt-5">
+    <div class="container">
+
+        <div class="row g-4 align-items-stretch">
+
+            <!-- SOL KART -->
+            <div class="col-md-6">
+                <div class="glass-card h-100">
+
+                    <h2 class="orbitron mb-4 text-info">
+                        METODOLOJİ FARKI
+                    </h2>
+
+                    <p class="text-secondary mb-5">
+                        Geleneksel çalışma yöntemleri ile SmartStudy'nin veri odaklı yaklaşımı
+                        arasındaki performans farkını inceleyin.
+                    </p>
+
+                    <h5 class="text-white mb-4">
+                        <i class="fas fa-shield-halved me-3"></i>
+                        SMARTSTUDY PROTOKOLÜ
+                    </h5>
+
+                    <div class="check-item">
+                        <i class="fas fa-circle-check"></i>
+                        <span>Dinamik Öğrenme Algoritmaları</span>
+                    </div>
+
+                    <div class="check-item">
+                        <i class="fas fa-circle-check"></i>
+                        <span>Bilişsel Yük Yönetimi</span>
+                    </div>
+
+                    <div class="check-item">
+                        <i class="fas fa-circle-check"></i>
+                        <span>Sürekli Veri Geri Bildirimi</span>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- PREMIUM KART -->
+            <div class="col-md-6">
+                <div class="premium-card-home h-100">
+
+                    <span class="premium-label">
+                        PREMIUM
+                    </span>
+
+                    <h3>SmartStudy Premium</h3>
+
+                    <p class="premium-desc">
+                        Net analizinden sonra eksik olduğun konulara özel video içeriklere,
+                        not alma sistemine ve gelişmiş koçluk paneline eriş.
+                    </p>
+
+                    <div class="premium-list">
+
+                        <p>✅ Eksik konulara özel videolar</p>
+
+                    <p>✅ Her derse özel YKS video içerikleri</p>
+
+                        <p>✅ Video izlerken not alma sistemi</p>
+
+                        <p>✅ Gelişmiş AI koçluk desteği</p>
+
+                    </div>
+
+                    <div class="premium-price">
+                        ₺149 <span>/ ay</span>
+                    </div>
+
+                    <a href="/payment" class="premium-home-btn">
+                        Premium Ol
+                    </a>
+
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</section>
+
+
+<!-- FOOTER -->
+<footer class="footer">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-6 text-center text-md-start">
+                <h4 class="orbitron text-info mb-0">SMARTSTUDY</h4>
+                <p class="small text-secondary mb-0">Akademik Performans Laboratuvarı © 2026</p>
+            </div>
+
+            <div class="col-md-6 text-center text-md-end mt-4 mt-md-0">
+            <a href="https://github.com/berkekarakanli" target="_blank" class="text-secondary me-3"><i class="fab fa-github fa-lg"></i></a>
+            <a href="https://www.linkedin.com/in/berkekarakanlii" target="_blank" class="text-secondary me-3"><i class="fab fa-linkedin fa-lg"></i></a>
+            <a href="mailto:berkekarakanli6@gmail.com" class="text-secondary"><i class="fas fa-envelope fa-lg"></i></a>
+            </div>
+        </div>
+    </div>
+</footer>
+
+<!-- SCRIPTS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
