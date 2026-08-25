@@ -24,8 +24,8 @@
         <% } else { %>
             <form id="addForm" class="row g-3 mb-4 align-items-end">
                 <div class="col-md-5">
-                    <label class="form-label small">Soru Fotoğrafı</label>
-                    <input type="file" accept="image/*" id="questionImage" class="form-control" required>
+                    <label class="form-label small">Soru Fotoğrafı (opsiyonel)</label>
+                    <input type="file" accept="image/*" id="questionImage" class="form-control">
                 </div>
                 <div class="col-md-5">
                     <label class="form-label small">Doğru Çözüm / Not</label>
@@ -70,9 +70,12 @@
             addForm.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const fileInput = document.getElementById('questionImage');
-                const note = document.getElementById('questionNote').value;
+                const note = document.getElementById('questionNote').value.trim();
                 const file = fileInput.files[0];
-                if (!file) return;
+                if (!file && !note) {
+                    alert('Bir fotoğraf seç veya en azından bir not yaz.');
+                    return;
+                }
 
                 const toBase64 = (f) => new Promise((resolve, reject) => {
                     const reader = new FileReader();
@@ -81,7 +84,7 @@
                     reader.readAsDataURL(f);
                 });
 
-                const image_base64 = await toBase64(file);
+                const image_base64 = file ? await toBase64(file) : '';
                 const res = await fetch('/api/wrong-questions/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
