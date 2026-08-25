@@ -735,7 +735,7 @@ app.get('/student-coach', requireLogin, async (req, res) => {
         const homeworks = hwSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ kod: user.bagli_koc_kodu, ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
 
-        res.render('student-coach', { homeworks, kocListesi });
+        res.render('student-coach', { user, homeworks, kocListesi });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Koç bilgisi yüklenirken sorun oluştu.', '/dashboard'));
