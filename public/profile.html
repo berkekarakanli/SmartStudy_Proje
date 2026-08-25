@@ -9,7 +9,8 @@
     <style>
         body{ background:#020617; color:white; font-family:'Inter',Arial,sans-serif; }
         .panel{ max-width:720px; margin:32px auto; background:rgba(30,41,59,.76); border:1px solid rgba(13,202,240,.25); border-radius:16px; padding:28px; box-sizing:border-box; }
-        .form-control{ background:#0f172a; border:1px solid #334155; color:white!important; padding:12px; }
+        .form-control, .form-control:focus{ background:#0f172a!important; border:1px solid #334155; color:white!important; padding:12px; }
+        .form-control:focus{ border-color:#0dcaf0; box-shadow:0 0 0 .25rem rgba(13,202,240,.25); }
         .form-control::placeholder { color: #64748b; }
         .avatar-circle {
             width: 64px; height: 64px; border-radius: 50%;
