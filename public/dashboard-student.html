@@ -9,221 +9,118 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <%- include('partials/dashboard-theme.html') %>
+    <style>
+        .appbar {
+            background: #0f172a; border-bottom: 1px solid rgba(255,255,255,0.06);
+            padding: 14px 20px; display: flex; align-items: center; justify-content: space-between;
+            margin: -1.5rem -1.5rem 1.5rem;
+        }
+        .appbar .brand { display:flex; align-items:center; gap:8px; color:var(--accent-blue); font-weight:700; letter-spacing:2px; font-size:15px; }
+        .level-pill {
+            display:inline-flex; align-items:center; gap:4px;
+            padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;
+            background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(13,202,240,0.3);
+            text-decoration: none;
+        }
+        .level-pill.is-premium { background: rgba(255,193,7,0.15); color:#ffc107; border-color: rgba(255,193,7,0.5); }
+    </style>
 </head>
 <body class="p-4">
-    <main class="container-fluid">
-        <header class="d-flex justify-content-between align-items-center mb-5 flex-wrap gap-3">
-            <div class="d-flex align-items-center">
-                <span class="app-icon me-3"><i class="fas fa-microchip"></i></span>
-                <div>
-                    <h2 class="text-info mb-0 orbitron fw-bold">SMARTSTUDY OS</h2>
-                    <span class="text-secondary">Merhaba, <%= user.ad %></span>
-                </div>
-            </div>
-            <div class="text-end d-flex align-items-center">
-                <span class="member-badge <%= user.level === 'Premium' ? 'is-premium' : '' %> me-3">
-                    <% if (user.level === 'Premium') { %><i class="fas fa-certificate me-1"></i><% } %><%= user.level || 'Free' %> Üye
-                </span>
-                <a href="/logout" class="btn btn-outline-danger btn-sm orbitron"><i class="fas fa-power-off me-1"></i> Çıkış</a>
-            </div>
-        </header>
-        <div class="row g-4">
-            <aside class="col-md-2">
-                <a href="/dashboard" class="sidebar-link orbitron text-info"><i class="fas fa-columns"></i> Genel Bakış</a>
-                <a href="/plan" class="sidebar-link orbitron"><i class="fas fa-plus-circle"></i> Yeni Analiz</a>
-                <a href="/wrong-questions" class="sidebar-link orbitron"><i class="fas fa-book"></i> Hata Defterim</a>
-                <a href="/student-coach" class="sidebar-link orbitron"><i class="fas fa-user-tie"></i> Koçum &amp; Ödevlerim</a>
-                <a href="/pomodoro" class="sidebar-link orbitron"><i class="fas fa-stopwatch"></i> Pomodoro</a>
-                <a href="/leaderboard" class="sidebar-link orbitron text-warning"><i class="fas fa-trophy"></i> Şöhretler Salonu</a>
-                <a href="/premium-dersler" class="sidebar-link orbitron text-warning"><i class="fas fa-crown"></i> Premium Modül</a>
-                <a href="/profile" class="sidebar-link orbitron"><i class="fas fa-user-cog"></i> Profil</a>
-            </aside>
+    <main class="container-fluid" style="max-width: 900px;">
+        <div class="appbar">
+            <span class="brand orbitron"><i class="fas fa-microchip"></i>SMARTSTUDY OS</span>
+            <a href="<%= user.level === 'Premium' ? '/premium-dersler' : '/payment' %>" class="level-pill <%= user.level === 'Premium' ? 'is-premium' : '' %>">
+                <% if (user.level === 'Premium') { %><i class="fas fa-check-circle"></i><% } %><%= user.level === 'Premium' ? 'Premium' : 'Free Üye' %>
+            </a>
+        </div>
 
-            <section class="col-md-10">
-                <div class="row g-4 mb-4">
-                    <div class="col-lg-6">
-                        <div class="glass h-100" style="border-color: #ffc107;">
-                            <h6 class="text-warning mb-3 orbitron"><i class="fas fa-user-tie me-2"></i>Eğitim Koçlarım (<%= kocListesi.length %>)</h6>
-                            <% if (kocListesi.length > 0) { %>
-                                <% kocListesi.forEach(c => { %>
-                                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary">
-                                        <div>
-                                            <i class="fas fa-check-circle text-success me-1"></i> <strong><%= c.ad %></strong>
-                                            <span class="text-secondary small ms-1">(<%= c.kod %>)</span>
-                                        </div>
-                                        <form action="/remove-coach" method="POST" class="m-0">
-                                            <input type="hidden" name="coachCode" value="<%= c.kod %>">
-                                            <button class="btn btn-sm btn-outline-danger py-0 px-2" title="Bu Koçtan Ayrıl"><i class="fas fa-times"></i></button>
-                                        </form>
-                                    </div>
-                                <% }) %>
-                            <% } else { %>
-                                <p class="text-white small mb-3">Henüz bir eğitmene bağlı değilsin.</p>
-                            <% } %>
-                            <p class="text-secondary small mt-3 mb-2">Başka bir koçla eşleşmek için kod gir:</p>
-                            <form action="/set-coach" method="POST" class="d-flex gap-2">
-                                <input type="text" name="coachCode" class="form-control form-control-sm bg-dark text-warning border-warning" placeholder="KOC-XXXXX" required>
-                                <button type="submit" class="btn btn-warning btn-sm fw-bold">Ekle</button>
-                            </form>
-                        </div>
-                    </div>
-                    <div class="col-lg-6">
-                        <% if (user.level !== 'Premium') { %>
-                            <div class="glass h-100" style="border-color:#ffc107; position:relative; overflow:hidden;">
-                                <div style="filter:blur(3px); opacity:0.4;">
-                                    <h5 class="text-warning">Premium Laboratuvar</h5>
-                                    <p class="small text-white">TYT Matematik, Paragraf Taktikleri, Video Dersleri...</p>
-                                </div>
-                                <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; width:100%;">
-                                    <a href="/payment" class="btn btn-warning fw-bold orbitron text-dark">Premium'a Geç <i class="fas fa-lock-open ms-1"></i></a>
-                                </div>
-                            </div>
-                        <% } else { %>
-                            <div class="glass h-100" style="border-color: #ffc107;">
-                                <h5 class="text-warning mb-3"><i class="fas fa-crown me-2"></i>Premium Modül</h5>
-                                <p class="small text-white-50">Tüm video dersler ve özel not alma laboratuvarınız aktif.</p>
-                                <a href="/premium-dersler" class="btn btn-warning w-100 orbitron text-dark fw-bold mt-2">Derslere Git</a>
-                            </div>
+        <p class="text-secondary mb-4"><%= user.email ? ('Merhaba, ' + user.email.split('@')[0]) : ('Merhaba, ' + user.ad) %></p>
+
+        <div class="row g-3 mb-2">
+            <div class="col-6">
+                <div class="stat-tile"><span class="stat-label">Analiz Sayısı</span><h2 class="stat-value orbitron text-white"><%= analizSayisi %></h2></div>
+            </div>
+            <div class="col-6">
+                <div class="stat-tile"><span class="stat-label">Son Net</span><h2 class="stat-value orbitron text-white"><%= sonNet %></h2></div>
+            </div>
+        </div>
+        <div class="row g-3 mb-4">
+            <div class="col-6">
+                <div class="stat-tile"><span class="stat-label">Gelişim İndeksi</span><h2 class="stat-value orbitron <%= gelisimClass %>"><%= gelisim %></h2></div>
+            </div>
+            <div class="col-6">
+                <div class="stat-tile"><span class="stat-label">Genel Hedef</span><h2 class="stat-value orbitron text-warning">Bekleniyor</h2></div>
+            </div>
+        </div>
+
+        <div class="glass mb-4">
+            <h6 class="text-info orbitron mb-3" style="letter-spacing:1px;">GELİŞİM TREND GRAFİĞİ</h6>
+            <% if (analizler.length > 0) { %>
+                <div style="position:relative; height:220px;"><canvas id="trendChart"></canvas></div>
+            <% } else { %>
+                <div class="text-center text-secondary py-5">Henüz analiz kaydın yok.</div>
+            <% } %>
+        </div>
+
+        <div class="glass mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="text-info orbitron m-0" style="letter-spacing:1px;">GEÇMİŞ ANALİZLER</h6>
+                <span class="text-secondary" style="font-size:10px;">Kayıtları kaydırabilirsiniz</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-dark table-hover text-center align-middle">
+                    <thead><tr><th>Tarih</th><th>Mat</th><th>Türkçe</th><th>Fen</th><th>Sosyal</th><th>Toplam</th><th>Sil</th></tr></thead>
+                    <tbody>
+                        <% if (analizler.length === 0) { %>
+                            <tr><td colspan="7" class="text-center text-secondary py-4">Henüz analiz kaydı yok.</td></tr>
                         <% } %>
-                    </div>
-                </div>
-
-                <ul class="nav nav-pills mb-4" id="examTabs" role="tablist">
-                    <% examTypes.forEach((type, i) => { %>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link orbitron <%= i === 0 ? 'active' : '' %> px-4 me-2" id="tab-<%= type %>" data-bs-toggle="pill" data-bs-target="#pane-<%= type %>" type="button" role="tab"><%= type %> PANELİ</button>
-                        </li>
-                    <% }) %>
-                </ul>
-
-                <div class="tab-content" id="examTabsContent">
-                    <% examTypes.forEach((type, i) => {
-                        const typeAnalizler = analizlerByExam[type] || [];
-                        const tToplam = typeAnalizler.length;
-                        const tSonNet = tToplam > 0 ? Number(typeAnalizler[0].toplam_net).toFixed(2) : '0.00';
-                        const tGelisim = tToplam > 1 ? (Number(typeAnalizler[0].toplam_net) - Number(typeAnalizler[1].toplam_net)).toFixed(2) : '0.00';
-                        const tHedef = (tToplam > 0 && typeAnalizler[0].hedef_net) ? Number(typeAnalizler[0].hedef_net) : null;
-                        let tKalan = null, tTamamlanma = 0, hedefMetni = type + ' Hedefi';
-                        if (tToplam > 0 && tHedef) {
-                            tKalan = Math.max(0, tHedef - Number(tSonNet)).toFixed(2);
-                            tTamamlanma = Math.min(100, (Number(tSonNet) / tHedef) * 100).toFixed(0);
-                            hedefMetni = type + ' Hedefine Kalan';
-                        }
-                        const tTasks = buildDailyTasks(typeAnalizler[0]);
-                    %>
-                    <div class="tab-pane fade <%= i === 0 ? 'show active' : '' %>" id="pane-<%= type %>" role="tabpanel" tabindex="0">
-                        <div class="row g-3 mb-4">
-                            <div class="col-6 col-md-3">
-                                <div class="stat-tile">
-                                    <i class="fas fa-layer-group stat-icon text-info"></i>
-                                    <span class="stat-label">Analiz Sayısı</span>
-                                    <h2 class="stat-value orbitron text-white"><%= tToplam %></h2>
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="stat-tile">
-                                    <i class="fas fa-bullseye stat-icon text-info"></i>
-                                    <span class="stat-label">Son Net</span>
-                                    <h2 class="stat-value orbitron text-white"><%= tSonNet %></h2>
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="stat-tile">
-                                    <i class="fas fa-arrow-trend-up stat-icon <%= Number(tGelisim) >= 0 ? 'text-success' : 'text-danger' %>"></i>
-                                    <span class="stat-label">Gelişim İndeksi</span>
-                                    <h2 class="stat-value orbitron <%= Number(tGelisim) >= 0 ? 'text-success' : 'text-danger' %>"><%= Number(tGelisim) > 0 ? '+' + tGelisim : tGelisim %></h2>
-                                </div>
-                            </div>
-                            <div class="col-6 col-md-3">
-                                <div class="stat-tile">
-                                    <i class="fas fa-flag-checkered stat-icon text-warning"></i>
-                                    <span class="stat-label"><%= hedefMetni %></span>
-                                    <h2 class="stat-value orbitron text-warning"><%= tKalan === null ? 'Bekleniyor' : tKalan %></h2>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row g-4 mb-4">
-                            <div class="col-lg-8">
-                                <div class="glass h-100">
-                                    <h5 class="text-info mb-3 orbitron"><%= type %> Gelişim Grafiği</h5>
-                                    <% if (tToplam > 0) { %>
-                                        <div style="position:relative; height:250px; width:100%;"><canvas id="chart-<%= type %>"></canvas></div>
-                                    <% } else { %>
-                                        <div class="text-center text-secondary py-5">Grafik için <%= type %> analizi girmelisiniz.</div>
-                                    <% } %>
-                                </div>
-                            </div>
-                            <div class="col-lg-4">
-                                <div class="glass h-100">
-                                    <h5 class="text-warning mb-3 orbitron">Hedef Durumu</h5>
-                                    <div class="target-bar mb-2"><span style="width:<%= tTamamlanma %>%"></span></div>
-                                    <p class="small text-secondary mb-4">%<%= tTamamlanma %> tamamlandı.</p>
-                                    <h6 class="text-info mt-4 orbitron">Görevler</h6>
-                                    <ul class="text-light small" style="padding-left: 1rem;">
-                                        <% tTasks.forEach(task => { %><li><%= task %></li><% }) %>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="glass mb-4">
-                            <h5 class="text-info mb-3 orbitron"><%= type %> Sistem Kayıtları</h5>
-                            <div class="table-responsive">
-                                <table class="table table-dark table-hover text-center align-middle">
-                                    <thead><tr><th>Tarih</th><th>Mat</th><th>Türkçe</th><th>Fen</th><th>Sosyal</th><th>Toplam</th><th>İşlem</th></tr></thead>
-                                    <tbody>
-                                        <% if (tToplam === 0) { %>
-                                            <tr><td colspan="7" class="text-center text-secondary py-4">Henüz analiz yok.</td></tr>
-                                        <% } %>
-                                        <% typeAnalizler.forEach(a => { %>
-                                            <tr>
-                                                <td><%= new Date(a.tarih).toLocaleDateString('tr-TR') %></td>
-                                                <td><%= a.matematik %></td>
-                                                <td><%= a.turkce %></td>
-                                                <td><%= a.fen %></td>
-                                                <td><%= a.sosyal %></td>
-                                                <td class="text-info fw-bold"><%= Number(a.toplam_net).toFixed(2) %></td>
-                                                <td>
-                                                    <form action="/delete-analysis" method="POST" class="m-0">
-                                                        <input type="hidden" name="analizId" value="<%= a.id %>">
-                                                        <button class="btn btn-sm btn-outline-danger py-0"><i class="fas fa-trash small"></i></button>
-                                                    </form>
-                                                </td>
-                                            </tr>
-                                        <% }) %>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                    <% }) %>
-                </div>
-            </section>
+                        <% analizler.forEach(a => { %>
+                            <tr>
+                                <td><%= a.tarih ? new Date(a.tarih).toLocaleDateString('tr-TR') : '-' %></td>
+                                <td><%= a.matematik || 0 %></td>
+                                <td><%= a.turkce || 0 %></td>
+                                <td><%= a.fen || 0 %></td>
+                                <td><%= a.sosyal || 0 %></td>
+                                <td class="text-info fw-bold"><%= a.toplam_net || 0 %></td>
+                                <td>
+                                    <form action="/delete-analysis" method="POST" class="m-0">
+                                        <input type="hidden" name="analizId" value="<%= a.id %>">
+                                        <button class="btn btn-sm btn-outline-danger py-0"><i class="fas fa-trash small"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </main>
+    <%- include('partials/bottom-nav.html', { activeTab: 'ozet', user }) %>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <% if (analizler.length > 0) { %>
     <script>
-        const charts = {};
-        <% examTypes.forEach(type => {
-            const typeAnalizler = (analizlerByExam[type] || []);
-            if (typeAnalizler.length > 0) {
-                const rev = [...typeAnalizler].reverse();
-                const cLabels = rev.map(a => new Date(a.tarih).toLocaleDateString('tr-TR'));
-                const cData = rev.map(a => Number(a.toplam_net || 0));
-        %>
-        setTimeout(() => {
-            const ctx_<%- type %> = document.getElementById('chart-<%- type %>');
-            if (ctx_<%- type %>) {
-                charts['<%- type %>'] = new Chart(ctx_<%- type %>, {
-                    type: 'line',
-                    data: {
-                        labels: <%- JSON.stringify(cLabels) %>,
-                        datasets: [{ label: '<%- type %> Toplam Net', data: <%- JSON.stringify(cData) %>, borderColor: '#0dcaf0', backgroundColor: 'rgba(13,202,240,0.1)', tension: 0.4, fill: true }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' } }, x: { grid: { color: 'rgba(255,255,255,0.05)' } } } }
-                });
+        const ctx = document.getElementById('trendChart');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: <%- JSON.stringify(analizler.map((a, i) => (i + 1) + '.Deneme')) %>,
+                datasets: [{
+                    data: <%- JSON.stringify(analizler.map(a => Number(a.toplam_net || 0))) %>,
+                    borderColor: '#0dcaf0',
+                    backgroundColor: 'rgba(13,202,240,0.1)',
+                    tension: 0, fill: true, pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { min: 0, max: 120, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 9 } } }
+                }
             }
-        }, 150);
-        <% } }) %>
+        });
     </script>
+    <% } %>
 </body>
 </html>

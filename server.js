@@ -614,22 +614,30 @@ app.get('/dashboard', requireLogin, async (req, res) => {
 
             res.render('dashboard-teacher', { user, roleBadgeText, myStudents, myAssignedHomeworks, hasNoStudents });
         } else {
+            // Flutter'daki HomeTabContent ile birebir aynı mantık: tüm
+            // analizler eskiden-yeniye tek bir listede, sınav türüne göre
+            // sekmelere ayrılmadan gösteriliyor.
             const analizSnapshot = await db.collection('analizler').where('user_id', '==', user.id).get();
-            const analizler = analizSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => new Date(b.tarih) - new Date(a.tarih));
-            
-            const analizlerByExam = {};
-            analizler.forEach(a => {
-                const type = a.sinav_turu || 'Genel';
-                if (!analizlerByExam[type]) analizlerByExam[type] = [];
-                analizlerByExam[type].push(a);
-            });
+            const analizler = analizSnapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
 
-            let examTypes = Object.keys(analizlerByExam);
-            if (examTypes.length === 0) examTypes = ['Genel'];
+            const analizSayisi = analizler.length;
+            const sonNet = analizler.length > 0 ? Number(analizler[analizler.length - 1].toplam_net || 0).toFixed(2) : '0.00';
 
-            const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ kod: user.bagli_koc_kodu, ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
+            let gelisim = '0.00';
+            let gelisimClass = 'text-success';
+            if (analizler.length >= 2) {
+                const ilkNet = Number(analizler[0].toplam_net || 0);
+                const sonNetSayi = Number(analizler[analizler.length - 1].toplam_net || 0);
+                const fark = sonNetSayi - ilkNet;
+                gelisim = (fark >= 0 ? '+' : '') + fark.toFixed(2);
+                gelisimClass = fark >= 0 ? 'text-success' : 'text-danger';
+            } else if (analizler.length === 1) {
+                gelisim = 'Başlangıç';
+            }
 
-            res.render('dashboard-student', { user, examTypes, analizlerByExam, kocListesi, buildDailyTasks });
+            res.render('dashboard-student', { user, analizler, analizSayisi, sonNet, gelisim, gelisimClass });
         }
     } catch (error) {
         console.error(error);
@@ -996,8 +1004,12 @@ app.get('/api/analizler', async (req, res) => {
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
 
         const snap = await db.collection('analizler').where('user_id', '==', user.id).get();
+        // NOT: Eskiden-yeniye (artan) sırayla dönüyor çünkü Flutter tarafı
+        // (dashboard_screen.dart) _analizler.first'ü "ilk net", .last'ı
+        // "son net" olarak kullanıyor - listenin sonunda en güncel kayıt
+        // olmasını bekliyor.
         const analizler = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
+            .sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
 
         res.json({ success: true, analizler, userLevel: user.level || 'Free' });
     } catch (e) {

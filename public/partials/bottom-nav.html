@@ -1,0 +1,88 @@
+<!--
+  Flutter'daki dashboard_screen.dart'taki bottomNavigationBar'ın web
+  karşılığı: sol/sağ 2'şer ikon + ortada parlayan + hızlı işlem butonu.
+  Her öğrenci sayfasına dahil edilir; hangi sayfada olunduğu `activeTab`
+  değişkeniyle belirlenir (özet | pomodoro | profil).
+-->
+<style>
+    body { padding-bottom: 110px !important; }
+    .bottom-nav {
+        position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
+        width: min(420px, calc(100% - 32px));
+        background: rgba(15,23,42,0.97);
+        border: 1.5px solid rgba(13,202,240,0.3);
+        border-radius: 24px;
+        box-shadow: 0 10px 30px rgba(13,202,240,0.15);
+        display: flex; align-items: center; justify-content: space-around;
+        padding: 8px 6px;
+        z-index: 1050;
+    }
+    .bottom-nav a, .bottom-nav button {
+        background: none; border: none; color: #64748b;
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        font-size: 10px; font-weight: 700; text-decoration: none;
+        padding: 6px 10px; border-radius: 14px;
+    }
+    .bottom-nav a i, .bottom-nav button i { font-size: 18px; }
+    .bottom-nav a.active { color: #0dcaf0; }
+    .bottom-nav .fab {
+        width: 52px; height: 52px; border-radius: 50%;
+        background: #0dcaf0; color: #000;
+        display: flex; align-items: center; justify-content: center;
+        margin-top: -26px;
+        box-shadow: 0 0 20px rgba(13,202,240,0.6);
+        font-size: 22px;
+        padding: 0;
+    }
+    .bottom-nav .premium-link { color: #ffc107; }
+</style>
+
+<nav class="bottom-nav">
+    <a href="/profile" class="<%= typeof activeTab !== 'undefined' && activeTab === 'profil' ? 'active' : '' %>">
+        <i class="fas fa-user"></i>Profil
+    </a>
+    <a href="/dashboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'ozet' ? 'active' : '' %>">
+        <i class="fas fa-table-columns"></i>Özet
+    </a>
+    <button type="button" class="fab" data-bs-toggle="modal" data-bs-target="#quickActionModal" aria-label="Hızlı işlemler">
+        <i class="fas fa-plus"></i>
+    </button>
+    <a href="/pomodoro" class="<%= typeof activeTab !== 'undefined' && activeTab === 'pomodoro' ? 'active' : '' %>">
+        <i class="fas fa-stopwatch"></i>Pomodoro
+    </a>
+    <a href="<%= (typeof user !== 'undefined' && user.level === 'Premium') ? '/premium-dersler' : '/payment' %>" class="premium-link">
+        <i class="fas fa-crown"></i>Premium
+    </a>
+</nav>
+
+<!-- HIZLI İŞLEM TERMİNALİ (Flutter'daki + butonu menüsü) -->
+<div class="modal fade" id="quickActionModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-light border border-secondary" style="border-radius:20px;">
+            <div class="modal-body p-4">
+                <p class="text-center orbitron text-info small fw-bold mb-4" style="letter-spacing:1px;">HIZLI İŞLEM TERMİNALİ</p>
+
+                <a href="/plan" class="d-flex align-items-center gap-3 p-3 mb-2 rounded-3 text-decoration-none" style="background:#1e293b; border:1px solid rgba(13,202,240,0.3);">
+                    <span class="rounded-circle d-flex align-items-center justify-content-center" style="width:38px;height:38px;background:rgba(13,202,240,0.2);"><i class="fas fa-chart-line text-info"></i></span>
+                    <div><div class="text-white fw-bold small">Yeni Net Analizi Ekle</div><div class="text-secondary" style="font-size:11px;">Sınav sonuçlarını ve hedeflerini kaydet</div></div>
+                </a>
+                <a href="/wrong-questions" class="d-flex align-items-center gap-3 p-3 mb-2 rounded-3 text-decoration-none" style="background:#1e293b; border:1px solid rgba(192,132,252,0.3);">
+                    <span class="rounded-circle d-flex align-items-center justify-content-center" style="width:38px;height:38px;background:rgba(192,132,252,0.2);"><i class="fas fa-bug text-purple" style="color:#c084fc;"></i></span>
+                    <div><div class="text-white fw-bold small">Hata Defterine Soru Ekle</div><div class="text-secondary" style="font-size:11px;">Çözemediğin soruları arşivle</div></div>
+                </a>
+                <a href="/leaderboard" class="d-flex align-items-center gap-3 p-3 mb-2 rounded-3 text-decoration-none" style="background:#1e293b; border:1px solid rgba(255,193,7,0.3);">
+                    <span class="rounded-circle d-flex align-items-center justify-content-center" style="width:38px;height:38px;background:rgba(255,193,7,0.2);"><i class="fas fa-trophy text-warning"></i></span>
+                    <div><div class="text-white fw-bold small">Şöhretler Salonu</div><div class="text-secondary" style="font-size:11px;">Doğrulanmış netlerle sıralamanı gör</div></div>
+                </a>
+                <a href="/student-coach" class="d-flex align-items-center gap-3 p-3 mb-2 rounded-3 text-decoration-none" style="background:#1e293b; border:1px solid rgba(52,211,153,0.3);">
+                    <span class="rounded-circle d-flex align-items-center justify-content-center" style="width:38px;height:38px;background:rgba(52,211,153,0.2);"><i class="fas fa-user-tie" style="color:#34d399;"></i></span>
+                    <div><div class="text-white fw-bold small">Koçum &amp; Ödevlerim</div><div class="text-secondary" style="font-size:11px;">Eğitim koçunla ve ödevlerinle bağlan</div></div>
+                </a>
+                <a href="/payment" class="d-flex align-items-center gap-3 p-3 rounded-3 text-decoration-none" style="background:#1e293b; border:1px solid rgba(255,193,7,0.3);">
+                    <span class="rounded-circle d-flex align-items-center justify-content-center" style="width:38px;height:38px;background:rgba(255,193,7,0.2);"><i class="fas fa-crown text-warning"></i></span>
+                    <div><div class="text-white fw-bold small">Premium'a Yükselt</div><div class="text-secondary" style="font-size:11px;">Sınırsız ayrıcalıklar dünyasına adım at</div></div>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
