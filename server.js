@@ -92,11 +92,16 @@ app.use(session({
 // artık her sayfanın HTML'i server.js içine gömülü dev string olarak değil,
 // kendi ayrı dosyasında duruyor ve gerçek kullanıcı verisiyle burada
 // render ediliyor.
-// Görünüm dosyaları .ejs değil, gerçek .html uzantısıyla duruyor (istek
-// üzerine) — Express'e bu uzantıyı EJS motoruyla render etmesini söylüyoruz.
+// Görünüm dosyaları .ejs değil, gerçek .html uzantısıyla ve hepsi
+// backend/public/ klasöründe duruyor (istek üzerine, index/login/register
+// ile aynı yerde görülebilsinler diye). Bu dosyalar gerçek kullanıcı
+// verisiyle sunucu tarafında dolduruluyor; bu yüzden firebase.json'da
+// Firebase Hosting'in bunları OLDUĞU GİBİ (işlenmemiş EJS şablonu olarak)
+// yayınlamaması için "ignore" listesine eklendiler - sadece Express/Render
+// üzerinden render edilerek servis ediliyorlar.
 app.engine('html', ejs.renderFile);
 app.set('view engine', 'html');
-app.set('views', path.join(__dirname, 'views'));
+app.set('views', path.join(__dirname, 'public'));
 
 // ==========================================
 // 1b. KABA KUVVET (BRUTE-FORCE) KORUMASI

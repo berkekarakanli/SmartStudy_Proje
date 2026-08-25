@@ -4,7 +4,21 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "partials/**",
+      "add-video.html",
+      "analysis.html",
+      "dashboard-student.html",
+      "dashboard-teacher.html",
+      "destek.html",
+      "leaderboard.html",
+      "payment.html",
+      "pomodoro.html",
+      "premium-dersler.html",
+      "profile.html",
+      "student-coach.html",
+      "teacher-setup.html",
+      "wrong-questions.html"
     ],
     "rewrites": [
       {
