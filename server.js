@@ -276,11 +276,34 @@ app.get('/', (req, res) => sendPage(res, 'index.html'));
 app.get('/login', (req, res) => sendPage(res, 'login.html'));
 app.get('/register', (req, res) => sendPage(res, 'register.html'));
 app.get('/plan', requireLogin, async (req, res) => {
-    const user = await currentUser(req);
-    if (user && user.role === 'teacher' && !user.teacher_type) {
-        return res.redirect('/teacher-setup');
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.redirect('/login');
+        if (user.role === 'teacher' && !user.teacher_type) {
+            return res.redirect('/teacher-setup');
+        }
+
+        const isStudent = user.role !== 'teacher';
+        let teacherData = null;
+
+        if (!isStudent) {
+            const studentsSnap = await db.collection('users')
+                .where('role', '==', 'student')
+                .where('bagli_koc_kodu', '==', user.koc_kodu)
+                .get();
+
+            teacherData = {
+                teacher_type: user.teacher_type || 'koc',
+                branch: user.branch || '',
+                students: studentsSnap.docs.map(doc => ({ id: doc.id, ad: doc.data().ad, email: doc.data().email }))
+            };
+        }
+
+        res.render('analysis', { user, isStudent, teacherData });
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Hata', 'Analiz terminali yüklenirken sorun oluştu.', '/dashboard'));
     }
-    sendPage(res, 'plan.html');
 });
 
 // EĞİTMEN VERİ API

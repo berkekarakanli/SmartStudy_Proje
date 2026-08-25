@@ -14,13 +14,14 @@
       {
         "source": "/register",
         "destination": "/register.html"
-      },
-      {
-        "source": "/plan",
-        "destination": "/plan.html"
       }
     ],
     "redirects": [
+      {
+        "source": "/plan",
+        "destination": "https://smartstudy-proje.onrender.com/plan",
+        "type": 302
+      },
       {
         "source": "/dashboard",
         "destination": "https://smartstudy-proje.onrender.com/dashboard",
