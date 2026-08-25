@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const ejs = require('ejs');
 const { readNetFromOpticImage } = require('./geminiService');
 
 const app = express();
@@ -91,7 +92,10 @@ app.use(session({
 // artık her sayfanın HTML'i server.js içine gömülü dev string olarak değil,
 // kendi ayrı dosyasında duruyor ve gerçek kullanıcı verisiyle burada
 // render ediliyor.
-app.set('view engine', 'ejs');
+// Görünüm dosyaları .ejs değil, gerçek .html uzantısıyla duruyor (istek
+// üzerine) — Express'e bu uzantıyı EJS motoruyla render etmesini söylüyoruz.
+app.engine('html', ejs.renderFile);
+app.set('view engine', 'html');
 app.set('views', path.join(__dirname, 'views'));
 
 // ==========================================
