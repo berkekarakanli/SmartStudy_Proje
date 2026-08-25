@@ -213,7 +213,7 @@
             </div>
 
             <div class="terminal-card">
-                <form action="/generate-plan" method="POST" onsubmit="return validateStudentMission()">
+                <form action="https://smartstudy-proje.onrender.com/generate-plan" method="POST" onsubmit="return validateStudentMission()">
                     <input type="hidden" name="sinav_turu" id="s_sinav_turu" value="TYT">
                     <input type="hidden" name="role" value="student">
                     <div id="student-dynamic-inputs" class="row g-4"></div>
@@ -232,7 +232,7 @@
             </div>
 
             <div class="terminal-card">
-                <form action="/assign-homework" method="POST" onsubmit="return validateTeacherMission()">
+                <form action="https://smartstudy-proje.onrender.com/assign-homework" method="POST" onsubmit="return validateTeacherMission()">
                     <input type="hidden" name="role" value="teacher">
                     <input type="hidden" name="subject" id="hidden-subject" value="">
                     
@@ -448,14 +448,17 @@
             }
         };
 
+        // Firebase Hosting statik olduğu için backend'e mutlak adresle konuşuyoruz.
+        const API_BASE = 'https://smartstudy-proje.onrender.com';
+
         document.addEventListener('DOMContentLoaded', async function() {
-            const userRole = localStorage.getItem('userRole') || 'student'; 
+            const userRole = localStorage.getItem('userRole') || 'student';
             if (userRole === 'teacher') {
                 document.getElementById('student-section').style.display = 'none';
                 document.getElementById('teacher-section').style.display = 'block';
 
                 try {
-                    const res = await fetch('/api/teacher-data');
+                    const res = await fetch(API_BASE + '/api/teacher-data', { credentials: 'include' });
                     const data = await res.json();
                     if (data.success) {
                         teacherData = data;

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartStudy | Pomodoro</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body{ background:#020617; color:white; font-family:Arial,sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding: 24px 16px; }
+        .panel{ max-width:420px; width:100%; background:rgba(30,41,59,.6); border:1px solid rgba(13,202,240,.25); border-radius:20px; padding:36px 28px; text-align:center; box-sizing:border-box; }
+        .timer { font-family:'Orbitron', sans-serif; font-size: clamp(3rem, 15vw, 4.5rem); color:#0dcaf0; margin: 20px 0; text-shadow: 0 0 25px rgba(13,202,240,0.4); }
+        .mode-badge { letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+    <main class="panel">
+        <a href="/dashboard" class="btn btn-sm btn-outline-info mb-3">Panele Dön</a>
+        <span class="badge bg-info text-dark mode-badge" id="modeBadge">ODAKLANMA</span>
+        <div class="timer" id="timerDisplay">25:00</div>
+        <p class="text-secondary small mb-4">Tamamlanan Odak Seansı: <span id="sessionCount">0</span></p>
+        <div class="d-flex gap-2 justify-content-center">
+            <button class="btn btn-info fw-bold px-4" id="startBtn">Başlat</button>
+            <button class="btn btn-outline-secondary px-4" id="resetBtn">Sıfırla</button>
+        </div>
+    </main>
+    <script>
+        const CURRENT_USER_ID = <%- JSON.stringify(user.id) %>;
+        const WORK_TIME = 25 * 60;
+        const BREAK_TIME = 5 * 60;
+        let remaining = WORK_TIME;
+        let isWork = true;
+        let isRunning = false;
+        let timerId = null;
+        let sessionCount = 0;
+
+        const display = document.getElementById('timerDisplay');
+        const badge = document.getElementById('modeBadge');
+        const startBtn = document.getElementById('startBtn');
+        const sessionEl = document.getElementById('sessionCount');
+
+        function render() {
+            const m = String(Math.floor(remaining / 60)).padStart(2, '0');
+            const s = String(remaining % 60).padStart(2, '0');
+            display.textContent = m + ':' + s;
+        }
+
+        function beep() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                osc.frequency.value = 880;
+                osc.connect(ctx.destination);
+                osc.start();
+                setTimeout(() => { osc.stop(); ctx.close(); }, 600);
+            } catch (e) {}
+        }
+
+        async function onWorkSessionComplete() {
+            sessionCount++;
+            sessionEl.textContent = sessionCount;
+            try {
+                await fetch('/update-pomodoro', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: CURRENT_USER_ID, minutes: 25 })
+                });
+            } catch (e) {}
+        }
+
+        function tick() {
+            remaining--;
+            if (remaining <= 0) {
+                beep();
+                if (isWork) { onWorkSessionComplete(); }
+                isWork = !isWork;
+                remaining = isWork ? WORK_TIME : BREAK_TIME;
+                badge.textContent = isWork ? 'ODAKLANMA' : 'MOLA';
+                badge.className = 'badge mode-badge ' + (isWork ? 'bg-info text-dark' : 'bg-warning text-dark');
+            }
+            render();
+        }
+
+        startBtn.addEventListener('click', () => {
+            isRunning = !isRunning;
+            if (isRunning) {
+                timerId = setInterval(tick, 1000);
+                startBtn.textContent = 'Duraklat';
+            } else {
+                clearInterval(timerId);
+                startBtn.textContent = 'Başlat';
+            }
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            clearInterval(timerId);
+            isRunning = false;
+            isWork = true;
+            remaining = WORK_TIME;
+            badge.textContent = 'ODAKLANMA';
+            badge.className = 'badge bg-info text-dark mode-badge';
+            startBtn.textContent = 'Başlat';
+            render();
+        });
+
+        render();
+    </script>
+</body>
+</html>

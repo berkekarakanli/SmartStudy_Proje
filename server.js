@@ -78,13 +78,20 @@ app.use(session({
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { 
-        httpOnly: true, 
-        sameSite: isProduction ? 'none' : 'lax', 
-        secure: isProduction, 
-        maxAge: 1000 * 60 * 60 * 24 
+    cookie: {
+        httpOnly: true,
+        sameSite: isProduction ? 'none' : 'lax',
+        secure: isProduction,
+        maxAge: 1000 * 60 * 60 * 24
     }
 }));
+
+// Her ekranın kendi görünüm dosyası (backend/views/*.ejs) olması için:
+// artık her sayfanın HTML'i server.js içine gömülü dev string olarak değil,
+// kendi ayrı dosyasında duruyor ve gerçek kullanıcı verisiyle burada
+// render ediliyor.
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
 
 // ==========================================
 // 2. YARDIMCI VE GÜVENLİK FONKSİYONLARI
@@ -273,57 +280,7 @@ app.get('/teacher-setup', requireLogin, async (req, res) => {
         if (!user || user.role !== 'teacher') return res.redirect('/dashboard');
         if (user.teacher_type) return res.redirect('/dashboard');
 
-        res.send(`
-        <!DOCTYPE html>
-        <html lang="tr">
-        <head>
-            <meta charset="UTF-8">
-            <title>Eğitmen Profil Kurulumu</title>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-            <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
-            <style>
-                body { background: #020617; color: white; font-family: 'Inter', sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; }
-                .setup-card { background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(13, 202, 240, 0.3); border-radius: 20px; padding: 40px; width: 450px; box-shadow: 0 15px 35px rgba(0,0,0,0.5); }
-                .form-control, .form-select { background: #0f172a; border: 1px solid #334155; color: white !important; padding: 12px; }
-            </style>
-        </head>
-        <body>
-            <div class="setup-card">
-                <h3 class="text-warning orbitron mb-3 text-center">Eğitmen Rol Kurulumu</h3>
-                <p class="text-secondary small text-center mb-4">Sistemi nasıl kullanacağınızı belirleyin. Bu ayar daha sonra değiştirilemez.</p>
-                <form action="/teacher-setup" method="POST">
-                    <div class="mb-3">
-                        <label class="form-label text-info fw-bold">Eğitmen Türü</label>
-                        <select name="teacher_type" class="form-select" id="tType" onchange="toggleBranch()" required>
-                            <option value="koc">Eğitim Koçu (Tüm Derslere ve Konulara Erişim)</option>
-                            <option value="brans">Branş Öğretmeni (Yalnızca Kendi Branşı)</option>
-                        </select>
-                    </div>
-                    <div class="mb-4" id="branchDiv" style="display:none;">
-                        <label class="form-label text-success fw-bold">Branşınız / Dersiniz</label>
-                        <select name="branch" class="form-select">
-                            <option value="Türkçe / Türk Dili ve Edebiyatı">Türkçe / Türk Dili ve Edebiyatı</option>
-                            <option value="Matematik">Matematik</option>
-                            <option value="Geometri">Geometri</option>
-                            <option value="Fizik">Fizik</option>
-                            <option value="Kimya">Kimya</option>
-                            <option value="Biyoloji">Biyoloji</option>
-                            <option value="Tarih">Tarih</option>
-                            <option value="Coğrafya">Coğrafya</option>
-                            <option value="Vatandaşlık">Vatandaşlık</option>
-                        </select>
-                    </div>
-                    <button class="btn btn-warning w-100 fw-bold py-3 orbitron">Seçimi Kaydet ve Başla</button>
-                </form>
-            </div>
-            <script>
-                function toggleBranch() {
-                    const val = document.getElementById('tType').value;
-                    document.getElementById('branchDiv').style.display = (val === 'brans') ? 'block' : 'none';
-                }
-            </script>
-        </body>
-        </html>`);
+        res.render('teacher-setup');
     } catch (e) {
         res.redirect('/dashboard');
     }
@@ -551,22 +508,6 @@ app.get('/dashboard', requireLogin, async (req, res) => {
             return res.redirect('/teacher-setup');
         }
 
-        const cssTheme = `
-        <style>
-            :root { --bg-deep: #020617; --card-glass: rgba(30, 41, 59, 0.72); --accent-blue: #0dcaf0; --accent-warning: #ffc107; }
-            body { background: var(--bg-deep); color: white; font-family: 'Inter', sans-serif; }
-            .orbitron { font-family: 'Orbitron', sans-serif; }
-            .glass { background: var(--card-glass); border: 1px solid rgba(13,202,240,0.22); border-radius: 14px; padding: 24px; }
-            .sidebar-link { display: block; padding: 12px 16px; color: #94a3b8; text-decoration: none; border-radius: 10px; margin-bottom: 6px; transition: 0.3s; }
-            .sidebar-link:hover, .sidebar-link.active { background: rgba(13,202,240,0.10); color: #0dcaf0; }
-            .target-bar { height: 12px; background: #0f172a; border-radius: 999px; overflow: hidden; }
-            .target-bar span { display: block; height: 100%; background: #ffc107; }
-            canvas { max-height: 280px; }
-            .nav-pills .nav-link { color: #94a3b8; border: 1px solid rgba(13,202,240,0.2) !important; background: transparent; border-radius: 8px; transition: 0.3s; }
-            .nav-pills .nav-link:hover { color: #0dcaf0; border-color: rgba(13,202,240,0.5) !important; }
-            .nav-pills .nav-link.active { background: rgba(13,202,240,0.15) !important; color: #0dcaf0 !important; border-color: #0dcaf0 !important; font-weight: bold; }
-        </style>`;
-
         if (user.role === 'teacher') {
             const snap1 = await db.collection('users')
                 .where('role', '==', 'student')
@@ -600,85 +541,10 @@ app.get('/dashboard', requireLogin, async (req, res) => {
             const hwSnapshot = await db.collection('homeworks').where('teacher_id', '==', user.id).get();
             const myAssignedHomeworks = hwSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-            let studentListHTML = myStudents.map(s => `
-                <tr>
-                    <td><strong>${escapeHtml(s.ad)}</strong></td>
-                    <td>${escapeHtml(s.email)}</td>
-                    <td><span class="badge bg-info text-dark">${s.analizSayisi} Adet</span></td>
-                    <td class="text-warning fw-bold">${s.sonNet} Net</td>
-                </tr>
-            `).join('');
-
-            if (!studentListHTML) {
-                studentListHTML = '<tr><td colspan="4" class="text-center text-secondary py-4">Henüz koç kodunuzu girerek sizinle eşleşen bir öğrenci bulunmuyor.</td></tr>';
-            }
-
-            let hwListHTML = myAssignedHomeworks.map(hw => `
-                <li class="mb-2 text-secondary">
-                    <i class="fas fa-check-circle text-info me-2"></i><strong>Öğrenci ID (${hw.student_id}):</strong> 
-                    ${hw.exam_type} - ${hw.subject} (${hw.topics.join(', ')})
-                </li>
-            `).join('');
-
-            if (!hwListHTML) {
-                hwListHTML = '<li class="text-secondary small">Henüz öğrencilere ödev ataması yapmadınız.</li>';
-            }
-
             const roleBadgeText = user.teacher_type === 'brans' ? `Branş Öğretmeni (${user.branch})` : 'Eğitim Koçu (Genel)';
             const hasNoStudents = myStudents.length === 0;
-            const assignBtnClass = hasNoStudents ? 'btn btn-info fw-bold mb-4 orbitron text-dark opacity-50 pointer-events-none' : 'btn btn-info fw-bold mb-4 orbitron text-dark';
-            const assignBtnTitle = hasNoStudents ? 'title="Eşleşen öğrenciniz olmadığı için ödev atayamazsınız"' : '';
 
-            res.send(`
-            <!DOCTYPE html>
-            <html lang="tr">
-            <head>
-                <meta charset="UTF-8">
-                <title>Eğitmen Paneli</title>
-                <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
-                <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-                ${cssTheme}
-            </head>
-            <body>
-                <nav class="navbar navbar-expand-lg sticky-top p-3" style="background: rgba(15,23,42,0.8); border-bottom: 1px solid rgba(13,202,240,0.15);">
-                    <div class="container-fluid">
-                        <a class="navbar-brand orbitron fw-bold text-info" href="#"><i class="fas fa-microchip me-2"></i>SMARTSTUDY OS</a>
-                        <div class="ms-auto d-flex align-items-center">
-                            <span class="badge bg-warning text-dark me-3 border border-warning px-3 py-2 orbitron">${roleBadgeText}</span>
-                            <a href="/logout" class="btn btn-outline-danger btn-sm orbitron" style="font-size: 0.75rem;"><i class="fas fa-power-off me-1"></i> Çıkış</a>
-                        </div>
-                    </div>
-                </nav>
-                <div class="container py-5">
-                    <div class="glass mb-4" style="border-color: #ffc107;">
-                        <h4 class="orbitron text-warning mb-3">Hoş Geldin, Eğitmen ${escapeHtml(user.ad)}</h4>
-                        <div class="alert alert-dark border border-warning text-white mb-4">
-                            <i class="fas fa-key text-warning me-2"></i> <strong>Sizin Koç Kodunuz:</strong> <span class="text-warning fs-5 ms-2 orbitron">${escapeHtml(user.koc_kodu)}</span>
-                            <p class="small text-secondary mt-2 mb-0">Öğrencilerinize bu kodu vererek sistem üzerinde doğrudan sizinle eşleşmelerini sağlayabilirsiniz.</p>
-                        </div>
-                        <a href="/plan" class="${assignBtnClass}" ${assignBtnTitle}><i class="fas fa-plus me-2"></i>Öğrencilere Ödev Atama Terminali</a>
-                        <a href="/add-video" class="btn btn-warning fw-bold mb-4 ms-2 orbitron text-dark"><i class="fas fa-video me-2"></i>Laboratuvara Video Ekle</a>
-                        ${hasNoStudents ? '<p class="text-warning small mb-3"><i class="fas fa-exclamation-triangle me-1"></i> Ödev atayabilmek için en az bir öğrencinin koç kodunuzla sizinle eşleşmesi gereklidir.</p>' : ''}
-
-                        <h5 class="orbitron text-info mt-4 mb-3"><i class="fas fa-users me-2"></i>Eşleşen Öğrencileriniz (${myStudents.length})</h5>
-                        <div class="table-responsive mb-4">
-                            <table class="table table-dark table-hover text-center align-middle">
-                                <thead>
-                                    <tr><th>Öğrenci Adı</th><th>E-Posta</th><th>Toplam Analiz</th><th>Son Net Durumu</th></tr>
-                                </thead>
-                                <tbody>
-                                    ${studentListHTML}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <h6 class="orbitron text-light mt-4 border-bottom border-secondary pb-2">Atadığınız Son Ödevler (${myAssignedHomeworks.length})</h6>
-                        <ul class="list-unstyled mt-3">${hwListHTML}</ul>
-                    </div>
-                </div>
-            </body>
-            </html>`);
+            res.render('dashboard-teacher', { user, roleBadgeText, myStudents, myAssignedHomeworks, hasNoStudents });
         } else {
             const analizSnapshot = await db.collection('analizler').where('user_id', '==', user.id).get();
             const analizler = analizSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => new Date(b.tarih) - new Date(a.tarih));
@@ -693,188 +559,9 @@ app.get('/dashboard', requireLogin, async (req, res) => {
             let examTypes = Object.keys(analizlerByExam);
             if (examTypes.length === 0) examTypes = ['Genel'];
 
-            const hwSnapshot = await db.collection('homeworks').where('student_id', '==', user.id).get(); 
-            const myHomeworks = hwSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-            let hwListHTML = myHomeworks.map(hw => `<li class="text-white mb-2"><i class="fas fa-book-open text-warning me-2"></i><strong>${hw.exam_type} - ${hw.subject}:</strong> <span class="text-info">${hw.topics.join(', ')}</span></li>`).join('');
-            if (!hwListHTML) hwListHTML = '<li class="text-white-50">Sana atanmış bir ödev yok.</li>';
-
-            let coachListHTML = '';
             const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ kod: user.bagli_koc_kodu, ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
 
-            if (kocListesi.length > 0) {
-                coachListHTML = kocListesi.map(c => `
-                    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary">
-                        <div>
-                            <i class="fas fa-check-circle text-success me-1"></i> <strong>${escapeHtml(c.ad)}</strong> 
-                            <span class="text-secondary small ms-1">(${escapeHtml(c.kod)})</span>
-                        </div>
-                        <form action="/remove-coach" method="POST" class="m-0">
-                            <input type="hidden" name="coachCode" value="${escapeHtml(c.kod)}">
-                            <button class="btn btn-sm btn-outline-danger py-0 px-2" title="Bu Koçtan Ayrıl"><i class="fas fa-times"></i></button>
-                        </form>
-                    </div>
-                `).join('');
-            } else {
-                coachListHTML = '<p class="text-white small mb-3">Henüz bir eğitmene bağlı değilsin.</p>';
-            }
-
-            let coachHTML = `
-            <h6 class="text-warning mb-3 orbitron"><i class="fas fa-user-tie me-2"></i>Eğitim Koçlarım (${kocListesi.length})</h6>
-            ${coachListHTML}
-            <p class="text-secondary small mt-3 mb-2">Başka bir koçla eşleşmek için kod gir:</p>
-            <form action="/set-coach" method="POST" class="d-flex gap-2">
-                <input type="text" name="coachCode" class="form-control form-control-sm bg-dark text-warning border-warning" placeholder="KOC-XXXXX" required>
-                <button type="submit" class="btn btn-warning btn-sm fw-bold">Ekle</button>
-            </form>`;
-
-            let premiumLockHTML = '';
-            if (user.level !== 'Premium') {
-                premiumLockHTML = `
-                <div class="glass h-100" style="border-color:#ffc107; position:relative; overflow:hidden;">
-                    <div style="filter:blur(3px); opacity:0.4;">
-                        <h5 class="text-warning">Premium Laboratuvar</h5>
-                        <p class="small text-white">TYT Matematik, Paragraf Taktikleri, Video Dersleri...</p>
-                    </div>
-                    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; width:100%;">
-                        <a href="/payment" class="btn btn-warning fw-bold orbitron text-dark">Premium'a Geç <i class="fas fa-lock-open ms-1"></i></a>
-                    </div>
-                </div>`;
-            } else {
-                premiumLockHTML = `
-                <div class="glass h-100" style="border-color: #ffc107;">
-                    <h5 class="text-warning mb-3"><i class="fas fa-crown me-2"></i>Premium Modül</h5>
-                    <p class="small text-white-50">Tüm video dersler ve özel not alma laboratuvarınız aktif.</p>
-                    <a href="/premium-dersler" class="btn btn-warning w-100 orbitron text-dark fw-bold mt-2">Derslere Git</a>
-                </div>`;
-            }
-
-            const tabsNavHTML = `
-                <ul class="nav nav-pills mb-4" id="examTabs" role="tablist">
-                    ${examTypes.map((type, i) => `
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link orbitron ${i===0 ? 'active' : ''} px-4 me-2" id="tab-${type}" data-bs-toggle="pill" data-bs-target="#pane-${type}" type="button" role="tab">${type} PANELİ</button>
-                        </li>
-                    `).join('')}
-                </ul>
-            `;
-
-            let chartScript = '<script>const charts = {};\n';
-            const tabsContentHTML = `
-                <div class="tab-content" id="examTabsContent">
-                    ${examTypes.map((type, i) => {
-                        const typeAnalizler = analizlerByExam[type] || [];
-                        const typeChartAnalizler = [...typeAnalizler].reverse();
-                        const tToplam = typeAnalizler.length;
-                        const tSonNet = tToplam > 0 ? Number(typeAnalizler[0].toplam_net).toFixed(2) : '0.00';
-                        const tGelisim = tToplam > 1 ? (Number(typeAnalizler[0].toplam_net) - Number(typeAnalizler[1].toplam_net)).toFixed(2) : '0.00';
-                        
-                        const tHedef = (tToplam > 0 && typeAnalizler[0].hedef_net) ? Number(typeAnalizler[0].hedef_net) : null;
-                        let tKalan = "-";
-                        let tTamamlanma = 0;
-                        let hedefMetni = `${type} Hedefi`;
-
-                        if (tToplam === 0 || !tHedef) {
-                            tKalan = `<span class="fs-6 text-secondary">Bekleniyor</span>`;
-                        } else {
-                            const kalan = Math.max(0, tHedef - Number(tSonNet));
-                            tKalan = kalan.toFixed(2);
-                            tTamamlanma = Math.min(100, (Number(tSonNet) / tHedef) * 100).toFixed(0);
-                            hedefMetni = `${type} Hedefine Kalan`;
-                        }
-
-                        const tTasks = buildDailyTasks(typeAnalizler[0]).map(task => `<li>${escapeHtml(task)}</li>`).join('');
-                        let chartAreaHTML = tToplam > 0 ? `<div style="position:relative; height:250px; width:100%;"><canvas id="chart-${type}"></canvas></div>` : `<div class="text-center text-secondary py-5">Grafik için ${type} analizi girmelisiniz.</div>`;
-                        let tableRows = tToplam > 0 ? typeAnalizler.map(a => `<tr><td>${escapeHtml(new Date(a.tarih).toLocaleDateString('tr-TR'))}</td><td>${escapeHtml(a.matematik)}</td><td>${escapeHtml(a.turkce)}</td><td>${escapeHtml(a.fen)}</td><td>${escapeHtml(a.sosyal)}</td><td class="text-info fw-bold">${escapeHtml(Number(a.toplam_net).toFixed(2))}</td><td><form action="/delete-analysis" method="POST" class="m-0"><input type="hidden" name="analizId" value="${a.id}"><button class="btn btn-sm btn-outline-danger py-0"><i class="fas fa-trash small"></i></button></form></td></tr>`).join('') : `<tr><td colspan="7" class="text-center text-secondary py-4">Henüz analiz yok.</td></tr>`;
-
-                        if (tToplam > 0) {
-                            const cLabels = typeChartAnalizler.map(a => new Date(a.tarih).toLocaleDateString('tr-TR'));
-                            const cData = typeChartAnalizler.map(a => Number(a.toplam_net || 0));
-                            chartScript += `
-                                setTimeout(() => {
-                                    const ctx_${type} = document.getElementById('chart-${type}');
-                                    if(ctx_${type}) {
-                                        charts['${type}'] = new Chart(ctx_${type}, {
-                                            type: 'line',
-                                            data: {
-                                                labels: ${JSON.stringify(cLabels)},
-                                                datasets: [{ label: '${type} Toplam Net', data: ${JSON.stringify(cData)}, borderColor: '#0dcaf0', backgroundColor: 'rgba(13,202,240,0.1)', tension: 0.4, fill: true }]
-                                            },
-                                            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: 'rgba(255,255,255,0.05)' } }, x: { grid: { color: 'rgba(255,255,255,0.05)' } } } }
-                                        });
-                                    }
-                                }, 150);
-                            `;
-                        }
-
-                        return `
-                        <div class="tab-pane fade ${i===0 ? 'show active' : ''}" id="pane-${type}" role="tabpanel" tabindex="0">
-                            <div class="row g-4 mb-4 text-center">
-                                <div class="col-md-3"><div class="glass py-4"><small class="text-secondary">Analiz Sayısı</small><h2 class="m-0 orbitron text-white mt-2">${tToplam}</h2></div></div>
-                                <div class="col-md-3"><div class="glass py-4"><small class="text-secondary">Son Net</small><h2 class="m-0 orbitron text-white mt-2">${tSonNet}</h2></div></div>
-                                <div class="col-md-3"><div class="glass py-4"><small class="text-secondary">Gelişim İndeksi</small><h2 class="m-0 orbitron mt-2 ${Number(tGelisim) >= 0 ? 'text-success' : 'text-danger'}">${Number(tGelisim) > 0 ? '+'+tGelisim : tGelisim}</h2></div></div>
-                                <div class="col-md-3"><div class="glass py-4"><small class="text-secondary">${hedefMetni}</small><h2 class="m-0 orbitron text-warning mt-2">${tKalan}</h2></div></div>
-                            </div>
-                            <div class="row g-4 mb-4">
-                                <div class="col-lg-8"><div class="glass h-100"><h5 class="text-info mb-3 orbitron">${type} Gelişim Grafiği</h5>${chartAreaHTML}</div></div>
-                                <div class="col-lg-4"><div class="glass h-100"><h5 class="text-warning mb-3 orbitron">Hedef Durumu</h5><div class="target-bar mb-2"><span style="width:${tTamamlanma}%"></span></div><p class="small text-secondary mb-4">%${tTamamlanma} tamamlandı.</p><h6 class="text-info mt-4 orbitron">Görevler</h6><ul class="text-light small" style="padding-left: 1rem;">${tTasks}</ul></div></div>
-                            </div>
-                            <div class="glass mb-4"><h5 class="text-info mb-3 orbitron">${type} Sistem Kayıtları</h5><table class="table table-dark table-hover text-center align-middle"><thead><tr><th>Tarih</th><th>Mat</th><th>Türkçe</th><th>Fen</th><th>Sosyal</th><th>Toplam</th><th>İşlem</th></tr></thead><tbody>${tableRows}</tbody></table></div>
-                        </div>`;
-                    }).join('')}
-                </div>`;
-            chartScript += '</script>';
-
-            res.send(`
-            <!DOCTYPE html>
-            <html lang="tr">
-            <head>
-                <meta charset="UTF-8">
-                <title>SmartStudy OS | Panel</title>
-                <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
-                <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-                <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-                ${cssTheme}
-            </head>
-            <body class="p-4">
-                <main class="container-fluid">
-                    <header class="d-flex justify-content-between align-items-center mb-5">
-                        <div>
-                            <h2 class="text-info mb-1 orbitron fw-bold">SMARTSTUDY OS</h2>
-                            <span class="text-secondary">Merhaba, ${escapeHtml(user.ad)}</span>
-                        </div>
-                        <div class="text-end d-flex align-items-center">
-                            <span class="badge ${user.level === 'Premium' ? 'text-bg-warning' : 'text-bg-secondary'} me-3">${escapeHtml(user.level || 'Free')} Üye</span>
-                            <a href="/logout" class="btn btn-outline-danger btn-sm orbitron"><i class="fas fa-power-off me-1"></i> Çıkış</a>
-                        </div>
-                    </header>
-                    <div class="row g-4">
-                        <aside class="col-md-2">
-                            <a href="/dashboard" class="sidebar-link orbitron text-info"><i class="fas fa-columns"></i> Genel Bakış</a>
-                            <a href="/plan" class="sidebar-link orbitron"><i class="fas fa-plus-circle"></i> Yeni Analiz</a>
-                            <a href="/wrong-questions" class="sidebar-link orbitron"><i class="fas fa-book"></i> Hata Defterim</a>
-                            <a href="/my-coach" class="sidebar-link orbitron"><i class="fas fa-user-tie"></i> Koçum &amp; Ödevlerim</a>
-                            <a href="/pomodoro" class="sidebar-link orbitron"><i class="fas fa-stopwatch"></i> Pomodoro</a>
-                            <a href="/leaderboard" class="sidebar-link orbitron text-warning"><i class="fas fa-trophy"></i> Şöhretler Salonu</a>
-                            <a href="/premium-dersler" class="sidebar-link orbitron text-warning"><i class="fas fa-crown"></i> Premium Modül</a>
-                            <a href="/profile" class="sidebar-link orbitron"><i class="fas fa-user-cog"></i> Profil</a>
-                        </aside>
-                        
-                        <section class="col-md-10">
-                            <div class="row g-4 mb-4">
-                                <div class="col-lg-6"><div class="glass h-100" style="border-color: #ffc107;">${coachHTML}</div></div>
-                                <div class="col-lg-6">${premiumLockHTML}</div>
-                            </div>
-                            ${tabsNavHTML}
-                            ${tabsContentHTML}
-                        </section>
-                    </div>
-                </main>
-                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-                ${chartScript}
-            </body>
-            </html>`);
+            res.render('dashboard-student', { user, examTypes, analizlerByExam, kocListesi, buildDailyTasks });
         }
     } catch (error) {
         console.error(error);
@@ -897,62 +584,13 @@ app.get('/profile', requireLogin, async (req, res) => {
     const pomodoroDakika = Number(user.pomodoro_dakika || 0);
     const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
 
-    const statCardsHTML = `
-        <div class="row g-3 mb-4 text-center">
-            <div class="col-6 col-md-3"><div class="stat-box"><i class="fas fa-chart-line text-info mb-2"></i><h4 class="m-0">${analizSnap.size}</h4><small class="text-secondary">Analiz</small></div></div>
-            <div class="col-6 col-md-3"><div class="stat-box"><i class="fas fa-book text-danger mb-2"></i><h4 class="m-0">${wrongSnap.size}</h4><small class="text-secondary">Hata Defteri</small></div></div>
-            <div class="col-6 col-md-3"><div class="stat-box"><i class="fas fa-stopwatch text-warning mb-2"></i><h4 class="m-0">${pomodoroDakika}</h4><small class="text-secondary">Odak Dakikası</small></div></div>
-            <div class="col-6 col-md-3"><div class="stat-box"><i class="fas fa-user-tie text-success mb-2"></i><h4 class="m-0">${kocListesi.length}</h4><small class="text-secondary">Bağlı Koç</small></div></div>
-        </div>`;
-
-    res.send(`
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <title>SmartStudy | Profil</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-        <style>
-            body{ background:#020617; color:white; font-family:Arial,sans-serif; }
-            .panel{ max-width:720px; margin:42px auto; background:rgba(30,41,59,.76); border:1px solid rgba(13,202,240,.25); border-radius:16px; padding:28px; }
-            .form-control{ background:#0f172a; border:1px solid #334155; color:white!important; padding:12px; }
-            .form-control::placeholder { color: #64748b; }
-            .stat-box{ background:rgba(15,23,42,.7); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:16px 8px; height:100%; }
-        </style>
-    </head>
-    <body>
-        <main class="panel">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h1 class="h3 text-info mb-1">Profil ve Ayarlar</h1>
-                    <span class="badge ${user.level === 'Premium' ? 'text-bg-warning' : 'text-bg-secondary'}">${escapeHtml(user.level || 'Free')} Üye</span>
-                </div>
-                <a href="/dashboard" class="btn btn-outline-info">Panele Dön</a>
-            </div>
-
-            ${statCardsHTML}
-
-            <form action="/profile" method="POST" class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label">Ad Soyad</label>
-                    <input class="form-control" name="ad" value="${escapeHtml(user.ad)}" required>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Email</label>
-                    <input class="form-control" name="email" type="email" value="${escapeHtml(user.email)}" required>
-                </div>
-                <div class="col-md-12">
-                    <label class="form-label">Yeni Şifre</label>
-                    <input class="form-control" name="newPassword" type="password" placeholder="Değiştirmek istemiyorsan boş bırak">
-                </div>
-                <div class="col-12 mt-4">
-                    <button class="btn btn-info fw-bold w-100 py-2">Değişiklikleri Kaydet</button>
-                </div>
-            </form>
-        </main>
-    </body>
-    </html>`);
+    res.render('profile', {
+        user,
+        analizCount: analizSnap.size,
+        wrongCount: wrongSnap.size,
+        pomodoroDakika,
+        kocListesi
+    });
 });
 
 app.post('/profile', requireLogin, async (req, res) => {
@@ -1000,110 +638,7 @@ app.get('/wrong-questions', requireLogin, async (req, res) => {
 
         const limitReached = user.level !== 'Premium' && questions.length >= 5;
 
-        const cardsHTML = questions.map(q => `
-            <div class="col-md-4 col-lg-3">
-                <div class="card bg-dark border-secondary h-100">
-                    ${q.image_base64 ? `<img src="data:image/jpeg;base64,${q.image_base64}" class="card-img-top" style="max-height:220px;object-fit:cover;" alt="Soru görseli">` : '<div class="text-center text-secondary py-5 small">Fotoğraf yok</div>'}
-                    <div class="card-body">
-                        <p class="small text-secondary mb-1">${escapeHtml(q.tarih ? new Date(q.tarih).toLocaleDateString('tr-TR') : '')}</p>
-                        <p class="card-text text-success small">${escapeHtml(q.ai_solution || 'Not yok')}</p>
-                        <form data-delete-form action="/api/delete-wrong-question" method="POST" class="m-0">
-                            <input type="hidden" name="questionId" value="${escapeHtml(q.id)}">
-                            <button class="btn btn-sm btn-outline-danger w-100"><i class="fas fa-trash me-1"></i> Sil</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        `).join('') || '<p class="text-secondary">Henüz hiç yanlış sorun yok. Aşağıdaki formdan ekleyebilirsin.</p>';
-
-        res.send(`
-        <!DOCTYPE html>
-        <html lang="tr">
-        <head>
-            <meta charset="UTF-8">
-            <title>SmartStudy | Dijital Hata Defteri</title>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-            <style>
-                body{ background:#020617; color:white; font-family:Arial,sans-serif; }
-                .panel{ max-width:1100px; margin:32px auto; background:rgba(30,41,59,.6); border:1px solid rgba(13,202,240,.25); border-radius:16px; padding:28px; }
-                .form-control{ background:#0f172a; border:1px solid #334155; color:white!important; padding:10px; }
-            </style>
-        </head>
-        <body>
-            <main class="panel">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h1 class="h3 text-info mb-0"><i class="fas fa-book me-2"></i>Dijital Hata Defterim</h1>
-                    <a href="/dashboard" class="btn btn-outline-info">Panele Dön</a>
-                </div>
-
-                ${limitReached ? `<div class="alert alert-warning"><i class="fas fa-lock me-2"></i>Free üyelikte en fazla 5 soru saklayabilirsin. Sınırsız eklemek için <a href="/payment" class="alert-link">Premium'a geç</a>.</div>` : `
-                <form id="addForm" class="row g-3 mb-4 align-items-end">
-                    <div class="col-md-5">
-                        <label class="form-label small">Soru Fotoğrafı</label>
-                        <input type="file" accept="image/*" id="questionImage" class="form-control" required>
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label small">Doğru Çözüm / Not</label>
-                        <input type="text" id="questionNote" class="form-control" placeholder="Örn: İşlem hatası yaptım...">
-                    </div>
-                    <div class="col-md-2">
-                        <button class="btn btn-info w-100 fw-bold" type="submit">Ekle</button>
-                    </div>
-                </form>
-                `}
-
-                <div class="row g-3">${cardsHTML}</div>
-            </main>
-            <script>
-                const addForm = document.getElementById('addForm');
-                if (addForm) {
-                    addForm.addEventListener('submit', async (e) => {
-                        e.preventDefault();
-                        const fileInput = document.getElementById('questionImage');
-                        const note = document.getElementById('questionNote').value;
-                        const file = fileInput.files[0];
-                        if (!file) return;
-
-                        const toBase64 = (f) => new Promise((resolve, reject) => {
-                            const reader = new FileReader();
-                            reader.onload = () => resolve(reader.result.split(',').pop());
-                            reader.onerror = reject;
-                            reader.readAsDataURL(f);
-                        });
-
-                        const image_base64 = await toBase64(file);
-                        const res = await fetch('/api/wrong-questions/add', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                userId: ${JSON.stringify(user.id)},
-                                question_text: 'Hatalı Soru Kaydı',
-                                ai_solution: note || 'Not girilmemiş.',
-                                image_base64
-                            })
-                        });
-                        const data = await res.json();
-                        if (data.success) { location.reload(); } else { alert(data.message || 'Soru eklenemedi.'); }
-                    });
-                }
-
-                document.querySelectorAll('[data-delete-form]').forEach(form => {
-                    form.addEventListener('submit', async (e) => {
-                        e.preventDefault();
-                        const questionId = form.querySelector('input[name=questionId]').value;
-                        const res = await fetch('/api/delete-wrong-question', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userId: ${JSON.stringify(user.id)}, questionId })
-                        });
-                        const data = await res.json();
-                        if (data.success) { location.reload(); } else { alert(data.message || 'Soru silinemedi.'); }
-                    });
-                });
-            </script>
-        </body>
-        </html>`);
+        res.render('wrong-questions', { user, questions, limitReached });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Hata defteri yüklenirken sorun oluştu.', '/dashboard'));
@@ -1114,7 +649,7 @@ app.get('/wrong-questions', requireLogin, async (req, res) => {
 // 8c. ÖĞRENCİ: KOÇUM & ÖDEVLERİM - Web / Bootstrap
 // Flutter'daki "Öğrenci-Koç" ekranının web panelindeki karşılığı.
 // ==========================================
-app.get('/my-coach', requireLogin, async (req, res) => {
+app.get('/student-coach', requireLogin, async (req, res) => {
     try {
         const user = await currentUser(req);
         if (!user) return res.redirect('/login');
@@ -1122,89 +657,16 @@ app.get('/my-coach', requireLogin, async (req, res) => {
 
         const hwSnap = await db.collection('homeworks').where('student_id', '==', user.id).get();
         const homeworks = hwSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
         const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ kod: user.bagli_koc_kodu, ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
-        const coachListHTML = kocListesi.length > 0 ? kocListesi.map(c => `
-            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary">
-                <div><i class="fas fa-check-circle text-success me-1"></i> <strong>${escapeHtml(c.ad)}</strong> <span class="text-secondary small ms-1">(${escapeHtml(c.kod)})</span></div>
-                <form action="/remove-coach" method="POST" class="m-0">
-                    <input type="hidden" name="coachCode" value="${escapeHtml(c.kod)}">
-                    <button class="btn btn-sm btn-outline-danger py-0 px-2" title="Bu Koçtan Ayrıl"><i class="fas fa-times"></i></button>
-                </form>
-            </div>
-        `).join('') : '<p class="text-white small mb-3">Henüz bir eğitmene bağlı değilsin.</p>';
 
-        const hwRowsHTML = homeworks.map(hw => {
-            const completed = hw.completed === true || hw.status === 'completed';
-            const topic = Array.isArray(hw.topics) ? hw.topics.join(', ') : (hw.topics || '');
-            return `
-            <div class="card bg-dark border-secondary mb-2 ${completed ? 'border-success' : ''}">
-                <div class="card-body d-flex justify-content-between align-items-center py-2">
-                    <div class="form-check m-0">
-                        <input class="form-check-input hw-toggle" type="checkbox" data-id="${escapeHtml(hw.id)}" id="hw-${escapeHtml(hw.id)}" ${completed ? 'checked' : ''}>
-                        <label class="form-check-label ${completed ? 'text-white-50 text-decoration-line-through' : 'text-white'}" for="hw-${escapeHtml(hw.id)}">
-                            <strong>${escapeHtml(hw.subject || 'Ders')}</strong> — ${escapeHtml(hw.exam_type || '')}<br>
-                            <span class="text-secondary small">${escapeHtml(topic)}</span>
-                        </label>
-                    </div>
-                </div>
-            </div>`;
-        }).join('') || '<p class="text-secondary small">Şu an atanmış aktif ödevin yok.</p>';
-
-        res.send(`
-        <!DOCTYPE html>
-        <html lang="tr">
-        <head>
-            <meta charset="UTF-8">
-            <title>SmartStudy | Koçum &amp; Ödevlerim</title>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-            <style>
-                body{ background:#020617; color:white; font-family:Arial,sans-serif; }
-                .panel{ max-width:900px; margin:32px auto; background:rgba(30,41,59,.6); border:1px solid rgba(13,202,240,.25); border-radius:16px; padding:28px; }
-                .form-control{ background:#0f172a; border:1px solid #334155; color:white!important; padding:10px; }
-            </style>
-        </head>
-        <body>
-            <main class="panel">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h1 class="h3 text-info mb-0"><i class="fas fa-user-tie me-2"></i>Eğitim Koçum &amp; Ödevlerim</h1>
-                    <a href="/dashboard" class="btn btn-outline-info">Panele Dön</a>
-                </div>
-
-                <div class="card bg-dark border-warning border-opacity-25 p-3 mb-4">
-                    <h6 class="text-warning orbitron mb-3">Eğitim Koçlarım (${kocListesi.length})</h6>
-                    ${coachListHTML}
-                    <p class="text-secondary small mt-3 mb-2">Başka bir koçla eşleşmek için kod gir:</p>
-                    <form action="/set-coach" method="POST" class="d-flex gap-2">
-                        <input type="text" name="coachCode" class="form-control form-control-sm bg-dark text-warning border-warning" placeholder="KOC-XXXXX" required>
-                        <button type="submit" class="btn btn-warning btn-sm fw-bold">Ekle</button>
-                    </form>
-                </div>
-
-                <h6 class="text-info orbitron mb-3">Koç Tarafından Verilen Ödevler (${homeworks.length})</h6>
-                ${hwRowsHTML}
-            </main>
-            <script>
-                document.querySelectorAll('.hw-toggle').forEach(cb => {
-                    cb.addEventListener('change', async () => {
-                        const res = await fetch('/api/update-homework', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ homeworkId: cb.dataset.id, completed: cb.checked })
-                        });
-                        const data = await res.json();
-                        if (data.success) { location.reload(); } else { alert(data.message || 'Güncellenemedi.'); }
-                    });
-                });
-            </script>
-        </body>
-        </html>`);
+        res.render('student-coach', { homeworks, kocListesi });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Koç bilgisi yüklenirken sorun oluştu.', '/dashboard'));
     }
 });
+// Eski isim (/my-coach) ile gelen linkler/yer imleri kırılmasın diye yönlendirme.
+app.get('/my-coach', requireLogin, (req, res) => res.redirect('/student-coach'));
 
 // ==========================================
 // 8d. ŞÖHRETLER SALONU (LEADERBOARD) - Web / Bootstrap
@@ -1222,104 +684,7 @@ app.get('/leaderboard', requireLogin, async (req, res) => {
         const isPremium = user.level === 'Premium';
         const visibleList = isPremium ? fullList : fullList.slice(0, 5);
 
-        const rowsHTML = visibleList.map((u, i) => `
-            <tr>
-                <td class="text-center"><span class="badge ${i < 3 ? 'bg-warning text-dark' : 'bg-secondary'}">${i + 1}</span></td>
-                <td>${escapeHtml(u.ad)} ${u.level === 'Premium' ? '<i class="fas fa-badge-check text-info ms-1" title="Premium"></i>' : ''}</td>
-                <td class="text-end text-warning fw-bold">${Number(u.en_yuksek_net).toFixed(2)} NET</td>
-            </tr>
-        `).join('') || '<tr><td colspan="3" class="text-center text-secondary py-4">Henüz yapay zeka tarafından doğrulanmış bir sonuç yok.</td></tr>';
-
-        const lockedRow = (!isPremium && fullList.length > 5) ? `
-            <tr>
-                <td colspan="3" class="text-center py-4">
-                    <i class="fas fa-lock text-warning mb-2 d-block"></i>
-                    <span class="text-warning small">Free üyeler yalnızca ilk 5 kişiyi görebilir.</span>
-                    <a href="/payment" class="btn btn-warning btn-sm fw-bold ms-2">Premium'a Geç</a>
-                </td>
-            </tr>` : '';
-
-        res.send(`
-        <!DOCTYPE html>
-        <html lang="tr">
-        <head>
-            <meta charset="UTF-8">
-            <title>SmartStudy | Şöhretler Salonu</title>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-            <style>
-                body{ background:#020617; color:white; font-family:Arial,sans-serif; }
-                .panel{ max-width:800px; margin:32px auto; background:rgba(30,41,59,.6); border:1px solid rgba(255,193,7,.25); border-radius:16px; padding:28px; }
-            </style>
-        </head>
-        <body>
-            <main class="panel">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h1 class="h3 text-warning mb-0"><i class="fas fa-trophy me-2"></i>Şöhretler Salonu</h1>
-                    <a href="/dashboard" class="btn btn-outline-info">Panele Dön</a>
-                </div>
-
-                <div class="alert alert-dark border border-info small">
-                    <i class="fas fa-info-circle text-info me-1"></i>
-                    Skorlar yalnızca yapay zeka tarafından okunan sınav sonuç belgesi / optik doğrulaması ile güncellenir.
-                </div>
-
-                <form id="opticForm" class="row g-2 mb-4 align-items-end">
-                    <div class="col-md-9">
-                        <label class="form-label small">Sonuç Belgesi / Optik Fotoğrafı</label>
-                        <input type="file" accept="image/*" id="opticImage" class="form-control bg-dark text-white border-secondary" required>
-                    </div>
-                    <div class="col-md-3">
-                        <button class="btn btn-warning w-100 fw-bold text-dark" type="submit" id="opticBtn">Doğrula</button>
-                    </div>
-                </form>
-
-                <table class="table table-dark table-hover align-middle">
-                    <thead><tr><th>#</th><th>Öğrenci</th><th class="text-end">Net</th></tr></thead>
-                    <tbody>${rowsHTML}${lockedRow}</tbody>
-                </table>
-            </main>
-            <script>
-                document.getElementById('opticForm').addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const btn = document.getElementById('opticBtn');
-                    const file = document.getElementById('opticImage').files[0];
-                    if (!file) return;
-
-                    btn.disabled = true;
-                    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
-
-                    const toBase64 = (f) => new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result.split(',').pop());
-                        reader.onerror = reject;
-                        reader.readAsDataURL(f);
-                    });
-
-                    try {
-                        const image_base64 = await toBase64(file);
-                        const res = await fetch('/api/verify-optic-leaderboard', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userId: ${JSON.stringify(user.id)}, image_base64 })
-                        });
-                        const data = await res.json();
-                        if (data.success) {
-                            alert('Belge onaylandı! Netiniz: ' + data.verified_net);
-                            location.reload();
-                        } else {
-                            alert(data.message || 'Belge doğrulanamadı.');
-                        }
-                    } catch (err) {
-                        alert('Yükleme sırasında hata oluştu.');
-                    } finally {
-                        btn.disabled = false;
-                        btn.innerHTML = 'Doğrula';
-                    }
-                });
-            </script>
-        </body>
-        </html>`);
+        res.render('leaderboard', { user, visibleList, isPremium, fullListLength: fullList.length });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Liderlik tablosu yüklenirken sorun oluştu.', '/dashboard'));
@@ -1334,115 +699,7 @@ app.get('/pomodoro', requireLogin, async (req, res) => {
         const user = await currentUser(req);
         if (!user) return res.redirect('/login');
 
-        res.send(`
-        <!DOCTYPE html>
-        <html lang="tr">
-        <head>
-            <meta charset="UTF-8">
-            <title>SmartStudy | Pomodoro</title>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-            <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
-            <style>
-                body{ background:#020617; color:white; font-family:Arial,sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding: 24px 16px; }
-                .panel{ max-width:420px; width:100%; background:rgba(30,41,59,.6); border:1px solid rgba(13,202,240,.25); border-radius:20px; padding:36px 28px; text-align:center; }
-                .timer { font-family:'Orbitron', sans-serif; font-size: clamp(3rem, 15vw, 4.5rem); color:#0dcaf0; margin: 20px 0; text-shadow: 0 0 25px rgba(13,202,240,0.4); }
-                .mode-badge { letter-spacing: 2px; }
-            </style>
-        </head>
-        <body>
-            <main class="panel">
-                <a href="/dashboard" class="btn btn-sm btn-outline-info mb-3">Panele Dön</a>
-                <span class="badge bg-info text-dark mode-badge" id="modeBadge">ODAKLANMA</span>
-                <div class="timer" id="timerDisplay">25:00</div>
-                <p class="text-secondary small mb-4">Tamamlanan Odak Seansı: <span id="sessionCount">0</span></p>
-                <div class="d-flex gap-2 justify-content-center">
-                    <button class="btn btn-info fw-bold px-4" id="startBtn">Başlat</button>
-                    <button class="btn btn-outline-secondary px-4" id="resetBtn">Sıfırla</button>
-                </div>
-            </main>
-            <script>
-                const WORK_TIME = 25 * 60;
-                const BREAK_TIME = 5 * 60;
-                let remaining = WORK_TIME;
-                let isWork = true;
-                let isRunning = false;
-                let timerId = null;
-                let sessionCount = 0;
-
-                const display = document.getElementById('timerDisplay');
-                const badge = document.getElementById('modeBadge');
-                const startBtn = document.getElementById('startBtn');
-                const sessionEl = document.getElementById('sessionCount');
-
-                function render() {
-                    const m = String(Math.floor(remaining / 60)).padStart(2, '0');
-                    const s = String(remaining % 60).padStart(2, '0');
-                    display.textContent = m + ':' + s;
-                }
-
-                function beep() {
-                    try {
-                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                        const osc = ctx.createOscillator();
-                        osc.frequency.value = 880;
-                        osc.connect(ctx.destination);
-                        osc.start();
-                        setTimeout(() => { osc.stop(); ctx.close(); }, 600);
-                    } catch (e) {}
-                }
-
-                async function onWorkSessionComplete() {
-                    sessionCount++;
-                    sessionEl.textContent = sessionCount;
-                    try {
-                        await fetch('/update-pomodoro', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userId: ${JSON.stringify(user.id)}, minutes: 25 })
-                        });
-                    } catch (e) {}
-                }
-
-                function tick() {
-                    remaining--;
-                    if (remaining <= 0) {
-                        beep();
-                        if (isWork) { onWorkSessionComplete(); }
-                        isWork = !isWork;
-                        remaining = isWork ? WORK_TIME : BREAK_TIME;
-                        badge.textContent = isWork ? 'ODAKLANMA' : 'MOLA';
-                        badge.className = 'badge mode-badge ' + (isWork ? 'bg-info text-dark' : 'bg-warning text-dark');
-                    }
-                    render();
-                }
-
-                startBtn.addEventListener('click', () => {
-                    isRunning = !isRunning;
-                    if (isRunning) {
-                        timerId = setInterval(tick, 1000);
-                        startBtn.textContent = 'Duraklat';
-                    } else {
-                        clearInterval(timerId);
-                        startBtn.textContent = 'Başlat';
-                    }
-                });
-
-                document.getElementById('resetBtn').addEventListener('click', () => {
-                    clearInterval(timerId);
-                    isRunning = false;
-                    isWork = true;
-                    remaining = WORK_TIME;
-                    badge.textContent = 'ODAKLANMA';
-                    badge.className = 'badge bg-info text-dark mode-badge';
-                    startBtn.textContent = 'Başlat';
-                    render();
-                });
-
-                render();
-            </script>
-        </body>
-        </html>`);
+        res.render('pomodoro', { user });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Pomodoro sayfası yüklenirken sorun oluştu.', '/dashboard'));
@@ -1453,53 +710,7 @@ app.get('/payment', requireLogin, async (req, res) => {
     const user = await currentUser(req);
     if (!user) return res.redirect('/login');
 
-    res.send(`
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <title>SmartStudy | Güvenli Ödeme Terminali</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-        <style>
-            body { background: #020617; color: white; font-family: 'Inter', sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; }
-            .pay-card { background: rgba(30, 41, 59, 0.85); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 20px; padding: 40px; width: 500px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
-            .form-control { background: #0f172a; border: 1px solid #334155; color: white !important; padding: 12px; }
-        </style>
-    </head>
-    <body>
-        <div class="pay-card">
-            <h3 class="text-warning font-monospace mb-2 text-center" style="font-family:'Orbitron', sans-serif;"><i class="fas fa-lock me-2"></i>PREMİUM ÖDEME</h3>
-            <p class="text-secondary small text-center mb-4">SmartStudy OS Sonsuz Erişim Paketi - 149.00 TL</p>
-            <form action="/payment-success" method="POST">
-                <div class="mb-3">
-                    <label class="form-label text-info small fw-bold">KART ÜZERİNDEKİ AD SOYAD</label>
-                    <input type="text" class="form-control" placeholder="Örn: Mustafa Berke Karakanlı" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label text-info small fw-bold">KART NUMARASI</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-dark border-secondary text-warning"><i class="fas fa-credit-card"></i></span>
-                        <input type="text" class="form-control" placeholder="4532 •••• •••• 8890" maxlength="19" required>
-                    </div>
-                </div>
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <label class="form-label text-info small fw-bold">SON KULLANMA</label>
-                        <input type="text" class="form-control" placeholder="AA/YY" maxlength="5" required>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label text-info small fw-bold">CVV GÜVENLİK</label>
-                        <input type="password" class="form-control" placeholder="•••" maxlength="4" required>
-                    </div>
-                </div>
-                <button class="btn btn-warning w-100 fw-bold py-3 orbitron text-dark">Ödemeyi Güvenle Tamamla</button>
-                <a href="/dashboard" class="d-block text-center text-secondary mt-3 text-decoration-none small">Panele Geri Dön</a>
-            </form>
-        </div>
-    </body>
-    </html>`);
+    res.render('payment');
 });
 
 app.post('/payment-success', requireLogin, async (req, res) => {
@@ -1512,55 +723,7 @@ app.get('/add-video', requireLogin, async (req, res) => {
     const user = await currentUser(req);
     if (!user || user.role !== 'teacher') return res.redirect('/dashboard');
 
-    res.send(`
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <title>Laboratuvara Video Ekle</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
-        <style>
-            body { background: #020617; color: white; font-family: 'Inter', sans-serif; padding: 40px; }
-            .panel { max-width: 600px; margin: 0 auto; background: rgba(30,41,59,0.8); border: 1px solid rgba(13,202,240,0.3); border-radius: 16px; padding: 30px; }
-            .form-control, .form-select { background: #0f172a; border: 1px solid #334155; color: white !important; padding: 12px; }
-        </style>
-    </head>
-    <body>
-        <div class="panel">
-            <h2 class="text-warning orbitron mb-3">Premium Laboratuvara Video Ekle</h2>
-            <form action="/add-video" method="POST">
-                <div class="mb-3">
-                    <label class="form-label text-info fw-bold">Ders / Branş</label>
-                    <select name="ders" class="form-select" required>
-                        <option value="matematik">Matematik</option>
-                        <option value="turkce">Türkçe / Türk Dili ve Edebiyatı</option>
-                        <option value="fizik">Fizik</option>
-                        <option value="kimya">Kimya</option>
-                        <option value="biyoloji">Biyoloji</option>
-                        <option value="cografya">Coğrafya</option>
-                        <option value="tarih">Tarih</option>
-                        <option value="geometri">Geometri</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label text-warning fw-bold">Video Başlığı</label>
-                    <input type="text" name="title" class="form-control" placeholder="Örn: TYT Matematik Problem Taktikleri" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label text-success fw-bold">Eğitmen / Hoca Adı</label>
-                    <input type="text" name="teacher" class="form-control" value="${escapeHtml(user.ad)}" required>
-                </div>
-                <div class="mb-4">
-                    <label class="form-label text-info fw-bold">YouTube Video ID</label>
-                    <input type="text" name="videoId" class="form-control" placeholder="Örn: J3pE1TrXhfY" required>
-                </div>
-                <button class="btn btn-warning w-100 fw-bold py-3 orbitron">Videoyu Sisteme Yükle</button>
-                <a href="/dashboard" class="d-block text-center text-secondary mt-3 text-decoration-none">Panele Geri Dön</a>
-            </form>
-        </div>
-    </body>
-    </html>`);
+    res.render('add-video', { user });
 });
 
 app.post('/add-video', requireLogin, async (req, res) => {
@@ -1595,8 +758,9 @@ app.get('/premium-dersler', requireLogin, async (req, res) => {
     const notlarSnap = await db.collection('video_notlari').where('user_id', '==', user.id).get();
     const notlar = notlarSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+    // NOT: Buradaki "SML Hoca / TYT Matematik Genel Tekrar" varsayılan videosu
+    // kaldırıldı (talep üzerine).
     const defaultVideos = [
-        { id: 'def_1', key: 'matematik', ders: 'Matematik', title: 'TYT Matematik Genel Tekrar', teacher: 'SML Hoca', videoId: 'J3pE1TrXhfY' },
         { id: 'def_2', key: 'turkce', ders: 'Türkçe / Edebiyat', title: 'TYT Türkçe Paragraf Taktikleri', teacher: 'Öznur Saat Yıldırım', videoId: 'CBkWmUCR4K4' },
         { id: 'def_3', key: 'fizik', ders: 'Fizik', title: 'TYT Fizik Genel Tekrar', teacher: 'Fizikfinito', videoId: 'SxwInE8ndkI' },
         { id: 'def_4', key: 'kimya', ders: 'Kimya', title: 'TYT Kimya Genel Tekrar', teacher: 'Meschemy', videoId: '1I-b1UM6ib8' },
@@ -1606,82 +770,12 @@ app.get('/premium-dersler', requireLogin, async (req, res) => {
     const customVidSnap = await db.collection('video_dersler').get();
     const customVideos = customVidSnap.docs.map(d => ({ id: d.id, key: d.data().ders, ...d.data() }));
 
-    const tumVideolar = [...defaultVideos, ...customVideos];
+    const videos = [...defaultVideos, ...customVideos].map(video => ({
+        ...video,
+        notes: notlar.filter(note => note.ders === video.key || note.video_id === video.id)
+    }));
 
-    const videoCards = tumVideolar.map(video => {
-        const dersNotlari = notlar.filter(note => note.ders === video.key || note.video_id === video.id);
-        const noteRows = dersNotlari.map(note => `
-            <div class="card bg-dark border-secondary mb-2 p-2">
-                <form action="/update-note" method="POST">
-                    <input type="hidden" name="noteId" value="${escapeHtml(note.id)}">
-                    <input type="hidden" name="ders" value="${escapeHtml(video.key)}">
-                    <input name="notBaslik" value="${escapeHtml(note.not_baslik)}" class="form-control form-control-sm bg-black text-white border-secondary mb-1">
-                    <textarea name="notMetni" class="form-control form-control-sm bg-black text-white border-secondary mb-1" rows="2" required>${escapeHtml(note.not_metni)}</textarea>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <small class="text-muted" style="font-size:0.7rem;">${escapeHtml(new Date(note.tarih).toLocaleDateString('tr-TR'))}</small>
-                        <button class="btn btn-sm btn-info py-0 px-2" style="font-size:0.75rem;">Güncelle</button>
-                    </div>
-                </form>
-                <form action="/delete-note" method="POST" class="mt-1">
-                    <input type="hidden" name="noteId" value="${escapeHtml(note.id)}">
-                    <input type="hidden" name="ders" value="${escapeHtml(video.key)}">
-                    <button class="btn btn-sm btn-outline-danger py-0 px-2 w-100" style="font-size:0.7rem;">Notu Sil</button>
-                </form>
-            </div>
-        `).join('') || '<p class="text-muted small">Bu video için henüz not alınmamış.</p>';
-
-        return `
-            <div class="card bg-secondary bg-opacity-10 border border-info border-opacity-25 rounded-4 p-4 mb-4">
-                <span class="badge bg-warning text-dark mb-2 align-self-start">${escapeHtml(video.ders || 'Genel')} (${escapeHtml(video.teacher || 'Eğitmen')})</span>
-                <h4 class="text-info mb-3">${escapeHtml(video.title)}</h4>
-                <div class="ratio ratio-16x9 mb-3 rounded overflow-hidden border border-secondary">
-                    <iframe src="https://www.youtube.com/embed/${escapeHtml(video.videoId)}" title="${escapeHtml(video.title)}" allowfullscreen></iframe>
-                </div>
-                <div class="mt-3">
-                    <h6 class="text-warning mb-2"><i class="fas fa-edit me-1"></i> Kişisel Not Al</h6>
-                    <form action="/save-note" method="POST">
-                        <input type="hidden" name="ders" value="${escapeHtml(video.key)}">
-                        <input type="hidden" name="videoId" value="${escapeHtml(video.id)}">
-                        <input type="hidden" name="videoTitle" value="${escapeHtml(video.title)}">
-                        <input name="notBaslik" placeholder="Not Başlığı" class="form-control form-control-sm bg-dark text-white border-secondary mb-2" required>
-                        <textarea name="notMetni" placeholder="Ders notunu buraya yaz..." class="form-control form-control-sm bg-dark text-white border-secondary mb-2" rows="3" required></textarea>
-                        <button class="btn btn-warning btn-sm w-100 fw-bold">Notu Kaydet</button>
-                    </form>
-                </div>
-                <div class="mt-4 pt-3 border-top border-secondary">
-                    <h6 class="text-light mb-2 small fw-bold">Kayıtlı Notlarım</h6>
-                    <div style="max-height: 220px; overflow-y: auto;">
-                        ${noteRows}
-                    </div>
-                </div>
-            </div>`;
-    }).join('');
-
-    res.send(`
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <title>Premium Video Laboratuvarı</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    </head>
-    <body class="bg-dark text-white p-4">
-        <main class="container py-4">
-            <header class="d-flex justify-content-between align-items-center mb-5 pb-3 border-bottom border-secondary">
-                <div>
-                    <h1 class="text-warning fw-bold"><i class="fas fa-crown me-2"></i> Premium Video Laboratuvarı</h1>
-                </div>
-                <a href="/dashboard" class="btn btn-outline-info">Panele Dön</a>
-            </header>
-            <div class="row">
-                <div class="col-lg-10 mx-auto">
-                    ${videoCards}
-                </div>
-            </div>
-        </main>
-    </body>
-    </html>`);
+    res.render('premium-dersler', { videos });
 });
 
 app.post('/save-note', requireLogin, async (req, res) => {

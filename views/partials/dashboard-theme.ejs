@@ -1,0 +1,26 @@
+<style>
+    :root { --bg-deep: #020617; --card-glass: rgba(30, 41, 59, 0.72); --accent-blue: #0dcaf0; --accent-warning: #ffc107; }
+    body { background: var(--bg-deep); color: white; font-family: 'Inter', sans-serif; }
+    .orbitron { font-family: 'Orbitron', sans-serif; }
+    .glass { background: var(--card-glass); border: 1px solid rgba(13,202,240,0.22); border-radius: 14px; padding: 24px; }
+    .sidebar-link { display: block; padding: 12px 16px; color: #94a3b8; text-decoration: none; border-radius: 10px; margin-bottom: 6px; transition: 0.3s; }
+    .sidebar-link:hover, .sidebar-link.active { background: rgba(13,202,240,0.10); color: #0dcaf0; }
+    .target-bar { height: 12px; background: #0f172a; border-radius: 999px; overflow: hidden; }
+    .target-bar span { display: block; height: 100%; background: #ffc107; }
+    canvas { max-height: 280px; }
+    .nav-pills .nav-link { color: #94a3b8; border: 1px solid rgba(13,202,240,0.2) !important; background: transparent; border-radius: 8px; transition: 0.3s; }
+    .nav-pills .nav-link:hover { color: #0dcaf0; border-color: rgba(13,202,240,0.5) !important; }
+    .nav-pills .nav-link.active { background: rgba(13,202,240,0.15) !important; color: #0dcaf0 !important; border-color: #0dcaf0 !important; font-weight: bold; }
+
+    /* MOBİL: sidebar tam genişlik ve yatay kaydırılabilir menüye döner */
+    @media (max-width: 767.98px) {
+        aside.col-md-2 {
+            display: flex;
+            overflow-x: auto;
+            gap: 6px;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+        }
+        aside.col-md-2 .sidebar-link { white-space: nowrap; margin-bottom: 0; }
+    }
+</style>
