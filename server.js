@@ -4,6 +4,7 @@ const session = require('express-session');
 const path = require('path');
 const crypto = require('crypto');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const { readNetFromOpticImage } = require('./geminiService');
 
 const app = express();
@@ -92,6 +93,41 @@ app.use(session({
 // render ediliyor.
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+
+// ==========================================
+// 1b. KABA KUVVET (BRUTE-FORCE) KORUMASI
+// ==========================================
+// Aynı IP'den kısa sürede çok fazla giriş/kayıt/şifre denemesi engellenir.
+function rateLimitJsonHandler(req, res) {
+    res.status(429).json({ success: false, message: 'Çok fazla deneme yaptınız. Lütfen birkaç dakika sonra tekrar deneyin.' });
+}
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 dakika
+    max: 15,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitJsonHandler
+});
+
+const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 saat
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res) => {
+        if (wantsJson(req)) return rateLimitJsonHandler(req, res);
+        res.status(429).send(errorPage('Çok Fazla Deneme', 'Bu IP adresinden çok fazla kayıt denemesi yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.', '/register'));
+    }
+});
+
+const sensitiveActionLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitJsonHandler
+});
 
 // ==========================================
 // 2. YARDIMCI VE GÜVENLİK FONKSİYONLARI
@@ -312,7 +348,7 @@ app.get('/logout', (req, res) => {
 // ==========================================
 // 5. KİMLİK DOĞRULAMA VE KAYIT (AUTH)
 // ==========================================
-app.post('/register', async (req, res) => {
+app.post('/register', registerLimiter, async (req, res) => {
     try {
         const ad = String(req.body.ad || '').trim();
         const email = String(req.body.email || '').trim().toLowerCase();
@@ -381,7 +417,7 @@ app.post('/register', async (req, res) => {
     }
 });
 
-app.post('/login', async (req, res) => {
+app.post('/login', loginLimiter, async (req, res) => {
     try {
         const email = String(req.body.email || '').trim().toLowerCase();
         const sifre = String(req.body.sifre || '');
@@ -1087,18 +1123,27 @@ app.post('/api/connect-coach', async (req, res) => {
     }
 });
 
-// NOT: Flutter bu uca sadece homeworkId + completed gönderiyor (sahibini
-// kanıtlayan bir kimlik göndermiyor). Bu yüzden bu uç, tıpkı diğer
-// mobil uçlar gibi, isteği gönderenin gerçekten o ödevin öğrencisi olduğunu
-// doğrulayamıyor. Daha sıkı bir yetkilendirme için Flutter tarafının
-// isteğe userId eklemesi ve burada ödevin student_id'siyle karşılaştırılması
-// gerekir.
+// Ödevi sadece o ödevin sahibi öğrenci ya da onu atayan öğretmen
+// güncelleyebilir (student_id / teacher_id ile karşılaştırılıyor).
 app.post('/api/update-homework', async (req, res) => {
     try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
         const { homeworkId, completed } = req.body;
         if (!homeworkId) return res.status(400).json({ success: false, message: 'homeworkId gerekli.' });
 
-        await db.collection('homeworks').doc(homeworkId).update({
+        const ref = db.collection('homeworks').doc(homeworkId);
+        const doc = await ref.get();
+        if (!doc.exists) {
+            return res.status(404).json({ success: false, message: 'Ödev bulunamadı.' });
+        }
+        const hw = doc.data();
+        if (hw.student_id !== user.id && hw.teacher_id !== user.id) {
+            return res.status(403).json({ success: false, message: 'Bu ödevi güncelleme yetkiniz yok.' });
+        }
+
+        await ref.update({
             completed: !!completed,
             status: completed ? 'completed' : 'pending'
         });
@@ -1131,7 +1176,7 @@ app.get('/api/leaderboard', async (req, res) => {
     }
 });
 
-app.post('/api/verify-optic-leaderboard', async (req, res) => {
+app.post('/api/verify-optic-leaderboard', sensitiveActionLimiter, async (req, res) => {
     try {
         const user = await resolveUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
@@ -1180,7 +1225,7 @@ app.post('/update-pomodoro', async (req, res) => {
 });
 
 // --- Şifre değiştirme (mobil profil ekranı) ---
-app.post('/api/change-password', async (req, res) => {
+app.post('/api/change-password', sensitiveActionLimiter, async (req, res) => {
     try {
         const user = await resolveUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
