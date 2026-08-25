@@ -16,8 +16,10 @@
 </head>
 <body>
     <main class="panel">
-        <a href="/dashboard" class="btn btn-sm btn-outline-info mb-3">Panele Dön</a>
-        <span class="badge bg-info text-dark mode-badge" id="modeBadge">ODAKLANMA</span>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <a href="/dashboard" class="btn btn-sm btn-outline-info">Panele Dön</a>
+            <span class="badge bg-info text-dark mode-badge" id="modeBadge">ODAKLANMA</span>
+        </div>
         <div class="timer" id="timerDisplay">25:00</div>
         <p class="text-secondary small mb-4">Tamamlanan Odak Seansı: <span id="sessionCount">0</span></p>
         <div class="d-flex gap-2 justify-content-center">
@@ -46,14 +48,29 @@
             display.textContent = m + ':' + s;
         }
 
+        // NOT: Flutter'daki gerçek alarm.mp3 dosyası şu an projede mevcut
+        // değil (pubspec.yaml'da assets tanımı da yorum satırı), o yüzden
+        // geçici olarak 3 saniye süren sentetik bir alarm sesi çalıyoruz.
+        // Gerçek ses dosyası eklendiğinde <audio> etiketiyle değiştirilecek.
         function beep() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                osc.frequency.value = 880;
-                osc.connect(ctx.destination);
-                osc.start();
-                setTimeout(() => { osc.stop(); ctx.close(); }, 600);
+                const totalDuration = 3; // saniye
+                const beepLength = 0.35;
+                const gap = 0.25;
+                let t = ctx.currentTime;
+                while (t < ctx.currentTime + totalDuration) {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.frequency.value = 880;
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    gain.gain.setValueAtTime(0.25, t);
+                    osc.start(t);
+                    osc.stop(t + beepLength);
+                    t += beepLength + gap;
+                }
+                setTimeout(() => ctx.close(), (totalDuration + 0.5) * 1000);
             } catch (e) {}
         }
 
