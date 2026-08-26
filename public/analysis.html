@@ -59,6 +59,7 @@
                         <option value="TYT">TYT (Temel Yeterlilik)</option>
                         <option value="AYT">AYT (Alan Yeterlilik)</option>
                         <option value="KPSS">KPSS Lisans</option>
+                        <option value="LGS">LGS (Liselere Geçiş)</option>
                     </select>
                 </div>
                 <div class="col-md-6" id="aytCategoryWrap" style="display:none;">
@@ -112,6 +113,7 @@
                         <option value="TYT">TYT</option>
                         <option value="AYT">AYT</option>
                         <option value="KPSS">KPSS</option>
+                        <option value="LGS">LGS</option>
                     </select>
                 </div>
                 <div class="col-md-6">
@@ -195,6 +197,14 @@
                 { id: 'k_cografya', label: 'Coğrafya', max: 18 },
                 { id: 'k_vat', label: 'Vatandaşlık', max: 9 },
                 { id: 'k_guncel', label: 'Güncel Olaylar', max: 6 }
+            ],
+            'LGS': [
+                { id: 'l_turkce', label: 'Türkçe', max: 20 },
+                { id: 'l_mat', label: 'Matematik', max: 20 },
+                { id: 'l_fen', label: 'Fen Bilimleri', max: 20 },
+                { id: 'l_inkilap', label: 'İnkılap Tarihi', max: 10 },
+                { id: 'l_din', label: 'Din Kültürü', max: 10 },
+                { id: 'l_ingilizce', label: 'İngilizce', max: 10 }
             ]
         };
 
@@ -367,6 +377,37 @@
                     'Ulusal Güncel Gelişmeler', 'Uluslararası Güncel Gelişmeler',
                     'Türkiye\'nin Üye Olduğu Uluslararası Kuruluşlar', 'Bilim ve Teknolojideki Gelişmeler',
                     'Sanat, Kültür ve Spordaki Gelişmeler'
+                ]
+            },
+            'LGS': {
+                'Türkçe / Türk Dili ve Edebiyatı': [
+                    'Fiilimsiler', 'Cümlenin Öğeleri', 'Fiilde Çatı', 'Sözcükte Anlam', 'Cümlede Anlam',
+                    'Cümle Çeşitleri', 'Yazım Kuralları', 'Paragrafta Anlam ve Yapı', 'Noktalama İşaretleri',
+                    'Anlatım Bozuklukları', 'Söz Sanatları', 'Metin Türleri'
+                ],
+                'Matematik': [
+                    'Çarpanlar ve Katlar', 'Üslü İfadeler', 'Kareköklü İfadeler', 'Veri Analizi',
+                    'Basit Olayların Olma Olasılığı', 'Cebirsel İfadeler ve Özdeşlikler',
+                    'Doğrusal Denklemler', 'Eşitsizlikler', 'Üçgenler', 'Eşlik ve Benzerlik',
+                    'Dönüşüm Geometrisi', 'Geometrik Cisimler (Silindir-Koni-Küre)'
+                ],
+                'Fen Bilimleri': [
+                    'Mevsimler ve İklim', 'DNA ve Genetik Kod', 'Basınç', 'Madde ve Endüstri',
+                    'Basit Makineler', 'Enerji Dönüşümleri ve Çevre Bilimi', 'Elektrik Yükleri ve Elektrik Enerjisi'
+                ],
+                'T.C. İnkılap Tarihi ve Atatürkçülük': [
+                    'Bir Kahraman Doğuyor', 'Millî Uyanış: Bağımsızlık Yolunda Atılan Adımlar',
+                    'Millî Bir Destan: Ya İstiklal Ya Ölüm', 'Atatürkçülük ve Çağdaşlaşan Türkiye',
+                    'Demokratikleşme Çabaları', 'Atatürk Dönemi Türk Dış Politikası',
+                    'Atatürk\'ün Ölümü ve Sonrası', 'Atatürk İlkeleri (Bütünleyici/Cumhuriyetçilik/Milliyetçilik vb.)'
+                ],
+                'Din Kültürü ve Ahlak Bilgisi': [
+                    'Kader İnancı (Kaza ve Kader)', 'Zekât, Sadaka ve Hac', 'Din ve Hayat',
+                    'Hz. Muhammed\'in (s.a.v.) Örnekliği', 'Kur\'an-ı Kerim ve Özellikleri'
+                ],
+                'İngilizce': [
+                    'Friendship', 'Teen Life', 'In The Kitchen', 'On The Phone',
+                    'Adventures', 'Tourism', 'Chores', 'Science'
                 ]
             }
         };
