@@ -83,11 +83,7 @@
             <span class="field-label">Ders Netleri</span>
             <div class="net-grid mb-3" id="netGrid"></div>
 
-            <div class="d-flex align-items-end gap-3 flex-wrap">
-                <div class="flex-grow-1">
-                    <span class="field-label" style="color:#ffc107;">Stratejik Hedef Net</span>
-                    <input type="number" step="0.25" id="hedefInput" class="form-control" placeholder="0.00">
-                </div>
+            <div class="d-flex justify-content-end">
                 <span class="limit-badge">Sınır: <span id="limitText">120</span></span>
             </div>
 
@@ -443,7 +439,6 @@
                     grid.appendChild(cell);
                 });
                 document.getElementById('limitText').textContent = maxLimit;
-                document.getElementById('hedefInput').placeholder = Math.floor(maxLimit * 0.75) + '.00';
             }
 
             function updateExamUI() {
@@ -464,19 +459,12 @@
             };
 
             window.submitAnalysis = async function (isAI) {
-                const hedef = parseFloat(document.getElementById('hedefInput').value) || 0;
-                if (hedef > maxLimit) {
-                    showToast('Hata: Hedef, maksimum sınır olan ' + maxLimit + ' neti aşamaz.', 'error');
-                    return;
-                }
-
                 const spinner = document.getElementById(isAI ? 'aiSpinner' : 'saveSpinner');
                 spinner.classList.remove('d-none');
 
                 const body = {
                     userId: CURRENT_USER_ID,
                     sinav_turu: activeKey(),
-                    hedef: hedef.toString(),
                     role: 'student',
                     is_ai_request: isAI.toString()
                 };

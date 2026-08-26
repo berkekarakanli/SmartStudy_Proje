@@ -505,6 +505,15 @@ app.post('/login', loginLimiter, async (req, res) => {
         }
 
         syncSessionUser(req, user);
+        // "Beni hatırla" işaretliyse oturum çerezi 30 gün, değilse varsayılan
+        // 24 saat sürüyor. NOT: Bu sadece tarayıcıdaki çerezin ömrünü uzatır;
+        // sunucu bellek-içi (in-memory) oturum deposu her sunucu yeniden
+        // başlatmasında (deploy veya Render'ın kendi periyodik yeniden
+        // başlatmaları) sıfırlanır - bu, "giriş sıfırlanıyor" şikayetinin
+        // ayrı ve daha köklü bir sebebi.
+        if (req.body.rememberMe) {
+            req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+        }
         res.json({ success: true, role: user.role, userId: user.id, id: user.id, level: user.level || 'Free' });
     } catch (error) {
         console.error(error);
@@ -648,14 +657,36 @@ function groupAnalizlerByExamType(analizler) {
     });
     return keys.map(key => {
         const fields = EXAM_TYPE_FIELDS[key] || EXAM_TYPE_FIELDS['TYT'];
+        const entries = groups[key].map(a => ({
+            ...a,
+            fieldValues: fields.map(([fieldId]) => getAnalizFieldValue(a, fieldId))
+        }));
+
+        // Her modülün (TYT/AYT-Sayısal/AYT-EA/AYT-Sözel/KPSS/LGS) "Son Net" ve
+        // "Gelişim İndeksi" değeri SADECE o modülün kendi kayıtlarından
+        // hesaplanıyor - başka bir sınav türünün netiyle karışmıyor.
+        const sonNet = entries.length > 0 ? Number(entries[entries.length - 1].toplam_net || 0).toFixed(2) : '0.00';
+        let gelisim = '0.00';
+        let gelisimClass = 'text-success';
+        if (entries.length >= 2) {
+            const ilkNet = Number(entries[0].toplam_net || 0);
+            const sonNetSayi = Number(entries[entries.length - 1].toplam_net || 0);
+            const fark = sonNetSayi - ilkNet;
+            gelisim = (fark >= 0 ? '+' : '') + fark.toFixed(2);
+            gelisimClass = fark >= 0 ? 'text-success' : 'text-danger';
+        } else if (entries.length === 1) {
+            gelisim = 'Başlangıç';
+        }
+
         return {
             key,
             label: EXAM_TYPE_LABELS[key] || key,
             fields,
-            entries: groups[key].map(a => ({
-                ...a,
-                fieldValues: fields.map(([fieldId]) => getAnalizFieldValue(a, fieldId))
-            }))
+            entries,
+            analizSayisi: entries.length,
+            sonNet,
+            gelisim,
+            gelisimClass
         };
     });
 }
@@ -715,21 +746,10 @@ app.get('/dashboard', requireLogin, async (req, res) => {
                 .map(doc => ({ id: doc.id, ...doc.data() }))
                 .sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
 
-            const analizSayisi = analizler.length;
-            const sonNet = analizler.length > 0 ? Number(analizler[analizler.length - 1].toplam_net || 0).toFixed(2) : '0.00';
-
-            let gelisim = '0.00';
-            let gelisimClass = 'text-success';
-            if (analizler.length >= 2) {
-                const ilkNet = Number(analizler[0].toplam_net || 0);
-                const sonNetSayi = Number(analizler[analizler.length - 1].toplam_net || 0);
-                const fark = sonNetSayi - ilkNet;
-                gelisim = (fark >= 0 ? '+' : '') + fark.toFixed(2);
-                gelisimClass = fark >= 0 ? 'text-success' : 'text-danger';
-            } else if (analizler.length === 1) {
-                gelisim = 'Başlangıç';
-            }
-
+            // NOT: "Son Net" ve "Gelişim İndeksi" artık TÜM sınav türlerini
+            // karıştırarak tek bir global değer olarak gösterilmiyor - her
+            // modülün (TYT/AYT.../KPSS/LGS) kendi değeri var, aşağıdaki
+            // groupAnalizlerByExamType() içinde hesaplanıyor.
             const examGroups = groupAnalizlerByExamType(analizler);
             // Sekmeler arasından varsayılan olarak açık gelecek olanı, kullanıcının
             // EN SON girdiği (tarihe göre) analizin sınav türü belirliyor.
@@ -737,7 +757,7 @@ app.get('/dashboard', requireLogin, async (req, res) => {
                 ? (analizler[analizler.length - 1].sinav_turu || 'TYT')
                 : null;
 
-            res.render('dashboard-student', { user, analizler, analizSayisi, sonNet, gelisim, gelisimClass, examGroups, defaultActiveKey });
+            res.render('dashboard-student', { user, analizler, examGroups, defaultActiveKey });
         }
     } catch (error) {
         console.error(error);
@@ -808,6 +828,51 @@ app.post('/profile', requireLogin, async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Profil güncellenirken bir sorun oluştu.', '/profile'));
+    }
+});
+
+// Bildirim tercihleri: şu an için sadece kaydediliyor (gerçek e-posta/push
+// gönderimi YOK - projede henüz bir e-posta altyapısı kurulmadı). Tercih
+// gerçek ve kalıcı; ileride e-posta servisi eklendiğinde doğrudan kullanılabilir.
+app.post('/api/update-notifications', requireUser, async (req, res) => {
+    try {
+        const user = req.currentUser;
+        await db.collection('users').doc(user.id).update({
+            email_notifications: !!req.body.email_notifications,
+            study_reminders: !!req.body.study_reminders
+        });
+        res.json({ success: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Tercihler kaydedilemedi.' });
+    }
+});
+
+// Hesap silme: geri alınamaz. Ekstra güvenlik için şifre tekrar isteniyor.
+// Kullanıcının kendi verilerini (analizler, hata defteri kayıtları) de
+// birlikte siliyor; hesap dokümanı silinip oturum sonlandırılıyor.
+app.post('/api/delete-account', requireUser, async (req, res) => {
+    try {
+        const user = req.currentUser;
+        const sifre = String(req.body.password || '');
+        if (!verifyPassword(sifre, user.sifre)) {
+            return res.status(401).json({ success: false, message: 'Şifre hatalı.' });
+        }
+
+        const [analizSnap, wrongSnap] = await Promise.all([
+            db.collection('analizler').where('user_id', '==', user.id).get(),
+            db.collection('wrong_questions').where('user_id', '==', user.id).get()
+        ]);
+        const batch = db.batch();
+        analizSnap.docs.forEach(d => batch.delete(d.ref));
+        wrongSnap.docs.forEach(d => batch.delete(d.ref));
+        batch.delete(db.collection('users').doc(user.id));
+        await batch.commit();
+
+        req.session.destroy(() => res.json({ success: true }));
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Hesap silinemedi.' });
     }
 });
 

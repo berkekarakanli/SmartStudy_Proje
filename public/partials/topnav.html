@@ -1,62 +1,73 @@
 <!--
-  Paylaşılan, "profesyonel web sitesi" tarzı üst gezinme çubuğu. Masaüstü
-  genişliklerinde görünür (yüzen, yuvarlak köşeli, pill-stilli menü öğeleri +
-  sağda avatar/dropdown); mobilde gizlenir ve yerini zaten var olan
-  partials/bottom-nav.html alır (Flutter'daki alt menüyle birebir eşleşen o
-  bileşen mobilde daha doğru bir desen). `user` ve `activeTab` parametreleriyle
-  include edilir (bkz. dashboard-student.html).
+  Paylaşılan, "profesyonel web sitesi" tarzı üst gezinme çubuğu. Artık HER
+  ekran boyutunda (masaüstü/tablet/telefon) görünür ve sabit/yüzer durumda
+  kalır - eski partials/bottom-nav.html tamamen kaldırıldı, bu navbar tek
+  gezinme kaynağı. Dar ekranlarda: menü linkleri yatay kaydırılabilir hale
+  gelir ve çok dar ekranlarda sadece ikonlar gösterilir (metin gizlenir).
+  `user` ve `activeTab` parametreleriyle include edilir (bkz. dashboard-student.html).
 -->
 <style>
-    /* Sadece masaüstünde ekstra üst boşluk ekleniyor (topnav orada sabit/
-       yüzer durumda). Mobilde topnav zaten gizli, bu yüzden sayfanın kendi
-       padding/negatif-margin hesaplarına (ör. dashboard-student.html'deki
-       .appbar) hiç dokunmuyoruz.
+    /* Sayfanın üstüne, topnav'ın kapladığı kadar boşluk ekleniyor (topnav
+       sabit/yüzer konumda olduğu için normal akışta yer kaplamıyor).
        NOT: "body[class]" da eklendi çünkü Bootstrap'ın .p-4 gibi spacing
        utility sınıfları da !important kullanıyor VE sınıf seçici oldukları
        için düz "body" öğe seçicisinden daha yüksek özgüllüğe (specificity)
        sahipler; salt "body{...!important}" bu yüzden onları yenemiyordu. */
+    body, body[class] { padding-top: 78px !important; }
     @media (min-width: 768px) { body, body[class] { padding-top: 86px !important; } }
 
-    /* Sayfaların kendi eski "Panele Dön / Ana Sayfa" buton gruplarını
-       (topnav zaten aynı işi gördüğü için) masaüstünde gizlemek için ortak
-       sınıf. Mobilde (topnav gizliyken) bu butonlar görünmeye devam eder. */
-    @media (min-width: 768px) { .legacy-page-nav { display: none !important; } }
+    /* Sayfaların kendi eski "Panele Dön / Ana Sayfa" buton grupları artık
+       her ekran boyutunda gizli - topnav aynı işi görüyor. */
+    .legacy-page-nav { display: none !important; }
 
     /* Sayfaların kendi "sticky" alt başlıkları (.panel-header-sticky,
-       .topbar) mobilde top:0'a yapışıyor (topnav orada zaten gizli).
-       Masaüstünde ise topnav sabit/yüzer durumda olduğu için bu başlıkların
-       da topnav'ın ALTINA yapışması gerekiyor, yoksa ikisi üst üste biner. */
+       .topbar) topnav'ın hemen altına yapışıyor, üst üste binmiyor. */
+    .panel-header-sticky, .topbar { top: 78px !important; }
     @media (min-width: 768px) { .panel-header-sticky, .topbar { top: 86px !important; } }
 
     .topnav-wrap {
-        position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-        width: min(980px, calc(100% - 32px));
+        position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+        width: min(980px, calc(100% - 16px));
         z-index: 1060;
     }
-    @media (max-width: 767.98px) { .topnav-wrap { display: none; } }
+    @media (min-width: 768px) { .topnav-wrap { top: 16px; width: min(980px, calc(100% - 32px)); } }
 
     .topnav {
-        display: flex; align-items: center; gap: 18px;
-        background: rgba(15,23,42,0.85);
+        display: flex; align-items: center; gap: 10px;
+        background: rgba(15,23,42,0.92);
         backdrop-filter: blur(14px);
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 999px;
-        padding: 8px 10px 8px 18px;
+        padding: 6px 6px 6px 12px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.35);
     }
+    @media (min-width: 768px) { .topnav { gap: 18px; padding: 8px 10px 8px 18px; } }
+
     .topnav-brand {
         display: flex; align-items: center; gap: 8px;
         color: var(--accent-blue, #0dcaf0); font-weight: 700; letter-spacing: 1.5px;
-        font-size: 13px; text-decoration: none; white-space: nowrap;
+        font-size: 13px; text-decoration: none; white-space: nowrap; flex-shrink: 0;
     }
-    .topnav-links { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; flex-wrap: wrap; }
+    .topnav-brand .brand-text { display: none; }
+    @media (min-width: 480px) { .topnav-brand .brand-text { display: inline; } }
+
+    .topnav-links {
+        display: flex; align-items: center; gap: 2px; flex: 1;
+        overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none;
+    }
+    .topnav-links::-webkit-scrollbar { display: none; }
+    @media (min-width: 768px) { .topnav-links { justify-content: center; flex-wrap: wrap; overflow-x: visible; } }
+
     .topnav-links a {
-        display: flex; align-items: center; gap: 7px;
+        display: flex; align-items: center; gap: 7px; flex-shrink: 0;
         color: #94a3b8; text-decoration: none; font-size: 12.5px; font-weight: 600;
-        padding: 8px 14px; border-radius: 999px; white-space: nowrap;
+        padding: 9px 10px; border-radius: 999px; white-space: nowrap;
         transition: 0.2s;
     }
-    .topnav-links a i { font-size: 13px; }
+    @media (min-width: 768px) { .topnav-links a { padding: 8px 14px; } }
+    .topnav-links a i { font-size: 14px; }
+    .topnav-links a .label { display: none; }
+    @media (min-width: 640px) { .topnav-links a .label { display: inline; } }
     .topnav-links a:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
     .topnav-links a.active { color: #020617; background: var(--accent-blue, #0dcaf0); font-weight: 700; }
     .topnav-user { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
@@ -81,20 +92,20 @@
 
 <div class="topnav-wrap">
     <nav class="topnav">
-        <a href="/" class="topnav-brand" title="Web Sitesine Dön"><i class="fas fa-microchip"></i>SMARTSTUDY</a>
+        <a href="/" class="topnav-brand" title="Web Sitesine Dön"><i class="fas fa-microchip"></i><span class="brand-text">SMARTSTUDY</span></a>
 
         <div class="topnav-links">
             <% if (user.role === 'teacher') { %>
-                <a href="/dashboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'ozet' ? 'active' : '' %>"><i class="fas fa-table-columns"></i>Panel</a>
-                <a href="/plan" class="<%= typeof activeTab !== 'undefined' && activeTab === 'analiz' ? 'active' : '' %>"><i class="fas fa-chart-line"></i>Ödev Ata</a>
-                <a href="/add-video" class="<%= typeof activeTab !== 'undefined' && activeTab === 'video' ? 'active' : '' %>"><i class="fas fa-video"></i>Video Ekle</a>
+                <a href="/dashboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'ozet' ? 'active' : '' %>"><i class="fas fa-table-columns"></i><span class="label">Panel</span></a>
+                <a href="/plan" class="<%= typeof activeTab !== 'undefined' && activeTab === 'analiz' ? 'active' : '' %>"><i class="fas fa-chart-line"></i><span class="label">Ödev Ata</span></a>
+                <a href="/add-video" class="<%= typeof activeTab !== 'undefined' && activeTab === 'video' ? 'active' : '' %>"><i class="fas fa-video"></i><span class="label">Video Ekle</span></a>
             <% } else { %>
-                <a href="/dashboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'ozet' ? 'active' : '' %>"><i class="fas fa-table-columns"></i>Özet</a>
-                <a href="/plan" class="<%= typeof activeTab !== 'undefined' && activeTab === 'analiz' ? 'active' : '' %>"><i class="fas fa-chart-line"></i>Analiz</a>
-                <a href="/wrong-questions" class="<%= typeof activeTab !== 'undefined' && activeTab === 'hatadefteri' ? 'active' : '' %>"><i class="fas fa-book"></i>Hata Defteri</a>
-                <a href="/pomodoro" class="<%= typeof activeTab !== 'undefined' && activeTab === 'pomodoro' ? 'active' : '' %>"><i class="fas fa-stopwatch"></i>Pomodoro</a>
-                <a href="/student-coach" class="<%= typeof activeTab !== 'undefined' && activeTab === 'kocum' ? 'active' : '' %>"><i class="fas fa-user-tie"></i>Koçum</a>
-                <a href="/leaderboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'liderlik' ? 'active' : '' %>"><i class="fas fa-trophy"></i>Liderlik</a>
+                <a href="/dashboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'ozet' ? 'active' : '' %>"><i class="fas fa-table-columns"></i><span class="label">Özet</span></a>
+                <a href="/plan" class="<%= typeof activeTab !== 'undefined' && activeTab === 'analiz' ? 'active' : '' %>"><i class="fas fa-chart-line"></i><span class="label">Analiz</span></a>
+                <a href="/wrong-questions" class="<%= typeof activeTab !== 'undefined' && activeTab === 'hatadefteri' ? 'active' : '' %>"><i class="fas fa-book"></i><span class="label">Hata Defteri</span></a>
+                <a href="/pomodoro" class="<%= typeof activeTab !== 'undefined' && activeTab === 'pomodoro' ? 'active' : '' %>"><i class="fas fa-stopwatch"></i><span class="label">Pomodoro</span></a>
+                <a href="/student-coach" class="<%= typeof activeTab !== 'undefined' && activeTab === 'kocum' ? 'active' : '' %>"><i class="fas fa-user-tie"></i><span class="label">Koçum</span></a>
+                <a href="/leaderboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'liderlik' ? 'active' : '' %>"><i class="fas fa-trophy"></i><span class="label">Liderlik</span></a>
             <% } %>
         </div>
 
