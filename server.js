@@ -597,6 +597,69 @@ app.post('/remove-coach', requireLogin, async (req, res) => {
 // ==========================================
 // 7. KONTROL PANELİ (DASHBOARD)
 // ==========================================
+// Öğrenci panelindeki "Gelişim Trend Grafiği" ve "Geçmiş Analizler" tablosu
+// eskiden sınav türünden bağımsız olarak TÜM analizleri tek bir grafikte ve
+// sabit TYT sütunlarında (Mat/Türkçe/Fen/Sosyal) gösteriyordu. Bu, farklı
+// sınav türlerinin (AYT/KPSS/LGS) derslerini yanlış sütunlara sıkıştırıp
+// çoğunu 0 gösteriyordu. Şimdi her sınav türü kendi grafiğinde ve kendi
+// ders sütunlarında ayrı ayrı gösteriliyor.
+const EXAM_TYPE_LABELS = {
+    'TYT': 'TYT',
+    'AYT_SAY': 'AYT (Sayısal)',
+    'AYT_EA': 'AYT (Eşit Ağırlık)',
+    'AYT_SOZ': 'AYT (Sözel)',
+    'KPSS': 'KPSS',
+    'LGS': 'LGS'
+};
+const EXAM_TYPE_FIELDS = {
+    'TYT': [['mat', 'Mat'], ['turkce', 'Türkçe'], ['fen', 'Fen'], ['sosyal', 'Sosyal']],
+    'AYT_SAY': [['mat', 'Mat'], ['fizik', 'Fizik'], ['kimya', 'Kimya'], ['biyoloji', 'Biyoloji']],
+    'AYT_EA': [['mat', 'Mat'], ['edebiyat', 'Edebiyat'], ['tarih1', 'Tarih-1'], ['cografya1', 'Coğrafya-1']],
+    'AYT_SOZ': [['edebiyat', 'Edebiyat'], ['tarih1', 'Tarih-1'], ['cografya1', 'Coğrafya-1'], ['tarih2', 'Tarih-2'], ['cografya2', 'Coğrafya-2'], ['felsefe', 'Felsefe'], ['din', 'Din/Fels.']],
+    'KPSS': [['k_turkce', 'Türkçe'], ['k_mat', 'Mat'], ['k_tarih', 'Tarih'], ['k_cografya', 'Coğrafya'], ['k_vat', 'Vatandaşlık'], ['k_guncel', 'Güncel']],
+    'LGS': [['l_turkce', 'Türkçe'], ['l_mat', 'Mat'], ['l_fen', 'Fen'], ['l_inkilap', 'İnkılap'], ['l_din', 'Din K.'], ['l_ingilizce', 'İngilizce']]
+};
+// Sınav türü sıralaması için sabit öncelik listesi; bilinmeyen bir tür
+// gelirse listenin sonuna eklenir.
+const EXAM_TYPE_ORDER = ['TYT', 'AYT_SAY', 'AYT_EA', 'AYT_SOZ', 'KPSS', 'LGS'];
+
+function getAnalizFieldValue(analiz, fieldId) {
+    if (analiz.detaylar && analiz.detaylar[fieldId] !== undefined) return Number(analiz.detaylar[fieldId]) || 0;
+    // Eski (detaylar alanı henüz yokken kaydedilmiş) TYT kayıtları için geriye dönük uyumluluk.
+    const legacyMap = { mat: 'matematik', turkce: 'turkce', fen: 'fen', sosyal: 'sosyal' };
+    if (legacyMap[fieldId] && analiz[legacyMap[fieldId]] !== undefined) return Number(analiz[legacyMap[fieldId]]) || 0;
+    return 0;
+}
+
+function groupAnalizlerByExamType(analizler) {
+    const groups = {};
+    analizler.forEach(a => {
+        const key = a.sinav_turu || 'TYT';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(a);
+    });
+    const keys = Object.keys(groups).sort((a, b) => {
+        const ia = EXAM_TYPE_ORDER.indexOf(a);
+        const ib = EXAM_TYPE_ORDER.indexOf(b);
+        if (ia === -1 && ib === -1) return a.localeCompare(b);
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+    });
+    return keys.map(key => {
+        const fields = EXAM_TYPE_FIELDS[key] || EXAM_TYPE_FIELDS['TYT'];
+        return {
+            key,
+            label: EXAM_TYPE_LABELS[key] || key,
+            fields,
+            entries: groups[key].map(a => ({
+                ...a,
+                fieldValues: fields.map(([fieldId]) => getAnalizFieldValue(a, fieldId))
+            }))
+        };
+    });
+}
+
 app.get('/dashboard', requireLogin, async (req, res) => {
     try {
         const user = await currentUser(req);
@@ -667,7 +730,9 @@ app.get('/dashboard', requireLogin, async (req, res) => {
                 gelisim = 'Başlangıç';
             }
 
-            res.render('dashboard-student', { user, analizler, analizSayisi, sonNet, gelisim, gelisimClass });
+            const examGroups = groupAnalizlerByExamType(analizler);
+
+            res.render('dashboard-student', { user, analizler, analizSayisi, sonNet, gelisim, gelisimClass, examGroups });
         }
     } catch (error) {
         console.error(error);

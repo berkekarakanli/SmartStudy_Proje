@@ -56,34 +56,39 @@
             </div>
         </div>
 
+        <% if (analizler.length === 0) { %>
         <div class="glass mb-4">
             <h6 class="text-info orbitron mb-3" style="letter-spacing:1px;">GELİŞİM TREND GRAFİĞİ</h6>
-            <% if (analizler.length > 0) { %>
-                <div style="position:relative; height:220px;"><canvas id="trendChart"></canvas></div>
-            <% } else { %>
-                <div class="text-center text-secondary py-5">Henüz analiz kaydın yok.</div>
-            <% } %>
+            <div class="text-center text-secondary py-5">Henüz analiz kaydın yok.</div>
+        </div>
+        <% } %>
+
+        <% examGroups.forEach(group => { %>
+        <div class="glass mb-4">
+            <h6 class="text-info orbitron mb-3" style="letter-spacing:1px;">GELİŞİM TREND GRAFİĞİ — <%= group.label %></h6>
+            <div style="position:relative; height:220px;"><canvas id="trendChart_<%= group.key %>"></canvas></div>
         </div>
 
         <div class="glass mb-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="text-info orbitron m-0" style="letter-spacing:1px;">GEÇMİŞ ANALİZLER</h6>
+                <h6 class="text-info orbitron m-0" style="letter-spacing:1px;">GEÇMİŞ ANALİZLER — <%= group.label %></h6>
                 <span class="text-secondary" style="font-size:10px;">Kayıtları kaydırabilirsiniz</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-dark table-hover text-center align-middle">
-                    <thead><tr><th>Tarih</th><th>Mat</th><th>Türkçe</th><th>Fen</th><th>Sosyal</th><th>Toplam</th><th>Sil</th></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>Tarih</th>
+                            <% group.fields.forEach(f => { %><th><%= f[1] %></th><% }) %>
+                            <th>Toplam</th>
+                            <th>Sil</th>
+                        </tr>
+                    </thead>
                     <tbody>
-                        <% if (analizler.length === 0) { %>
-                            <tr><td colspan="7" class="text-center text-secondary py-4">Henüz analiz kaydı yok.</td></tr>
-                        <% } %>
-                        <% analizler.forEach(a => { %>
+                        <% group.entries.forEach(a => { %>
                             <tr>
                                 <td><%= a.tarih ? new Date(a.tarih).toLocaleDateString('tr-TR') : '-' %></td>
-                                <td><%= a.matematik || 0 %></td>
-                                <td><%= a.turkce || 0 %></td>
-                                <td><%= a.fen || 0 %></td>
-                                <td><%= a.sosyal || 0 %></td>
+                                <% a.fieldValues.forEach(v => { %><td><%= v %></td><% }) %>
                                 <td class="text-info fw-bold"><%= a.toplam_net || 0 %></td>
                                 <td>
                                     <form action="/delete-analysis" method="POST" class="m-0">
@@ -97,33 +102,37 @@
                 </table>
             </div>
         </div>
+        <% }) %>
     </main>
     <%- include('partials/bottom-nav.html', { activeTab: 'ozet', user }) %>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <% if (analizler.length > 0) { %>
+    <% examGroups.forEach(group => { %>
     <script>
-        const ctx = document.getElementById('trendChart');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: <%- JSON.stringify(analizler.map((a, i) => (i + 1) + '.Deneme')) %>,
-                datasets: [{
-                    data: <%- JSON.stringify(analizler.map(a => Number(a.toplam_net || 0))) %>,
-                    borderColor: '#0dcaf0',
-                    backgroundColor: 'rgba(13,202,240,0.1)',
-                    tension: 0, fill: true, pointRadius: 3
-                }]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { min: 0, max: 120, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 9 } } }
+        (function () {
+            const ctx = document.getElementById('trendChart_<%= group.key %>');
+            if (!ctx) return;
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: <%- JSON.stringify(group.entries.map((a, i) => (i + 1) + '.Deneme')) %>,
+                    datasets: [{
+                        data: <%- JSON.stringify(group.entries.map(a => Number(a.toplam_net || 0))) %>,
+                        borderColor: '#0dcaf0',
+                        backgroundColor: 'rgba(13,202,240,0.1)',
+                        tension: 0, fill: true, pointRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { min: 0, max: 120, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 9 } } }
+                    }
                 }
-            }
-        });
+            });
+        })();
     </script>
-    <% } %>
+    <% }) %>
 </body>
 </html>
