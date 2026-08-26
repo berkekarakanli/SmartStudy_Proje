@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="view-transition" content="same-origin">
+    <style>@media (prefers-reduced-motion: no-preference) { ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .22s; } }</style>
+    <title>SmartStudy | Ayarlar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body{ background:#020617; color:white; font-family:'Inter',Arial,sans-serif; }
+        .orbitron { font-family: 'Orbitron', sans-serif; }
+        .panel{ max-width:760px; margin:32px auto; box-sizing:border-box; }
+        .panel-header-sticky { position:sticky; top:0; z-index:20; background:#0f172a; margin:0 0 20px; padding:16px 20px; border-radius:16px; border:1px solid rgba(13,202,240,.2); display:flex; justify-content:space-between; align-items:center; }
+        .form-control, .form-control:focus{ background:#0f172a!important; border:1px solid #334155; color:white!important; padding:12px; }
+        .form-control:focus{ border-color:#0dcaf0; box-shadow:0 0 0 .25rem rgba(13,202,240,.25); }
+        .form-control::placeholder { color: #64748b; }
+
+        /* Ayarlar sayfası, dashboard'daki "modül seçici" sekme dilini
+           kullanıyor - referans tasarımdaki düz kart yığını yerine bizim
+           kendi sci-fi/terminal görsel dilimizle ayrışıyor. */
+        .settings-tabs { display:flex; gap:6px; flex-wrap:wrap; padding:6px; background:#0f172a; border:1px solid rgba(13,202,240,0.15); border-radius:14px; margin-bottom:1.25rem; }
+        .settings-tab {
+            flex:1; min-width:110px;
+            background:transparent; border:1px solid transparent; color:#64748b;
+            font-family:'Orbitron',sans-serif; font-size:10.5px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+            padding:10px; border-radius:10px; display:flex; align-items:center; justify-content:center; gap:6px;
+            transition:.25s; cursor:pointer;
+        }
+        .settings-tab:hover { color:#cbd5e1; }
+        .settings-tab.active { color:#020617; background:linear-gradient(135deg,#0dcaf0,#0ea5c4); box-shadow:0 0 18px rgba(13,202,240,0.5); }
+        .settings-tab.danger.active { background:linear-gradient(135deg,#f87171,#dc2626); box-shadow:0 0 18px rgba(220,53,69,0.5); }
+
+        .settings-panel { background:rgba(30,41,59,.6); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding:24px; }
+        .settings-panel.danger-panel { border-color:rgba(220,53,69,.35); }
+        .settings-panel h6 { letter-spacing:.5px; }
+
+        .support-row { display:flex; align-items:center; gap:14px; background:rgba(13,202,240,.08); border:1px solid rgba(13,202,240,.2); border-radius:12px; padding:16px; margin-top:20px; }
+        .support-row > i { font-size:1.3rem; color:#0dcaf0; }
+
+        .form-switch .form-check-input { width:2.4em; height:1.3em; cursor:pointer; }
+        .form-switch .form-check-input:checked { background-color:#0dcaf0; border-color:#0dcaf0; }
+    </style>
+</head>
+<body>
+    <%- include('partials/toast.html') %>
+    <%- include('partials/topnav.html', { user, activeTab: 'ozet' }) %>
+    <main class="panel">
+        <div class="panel-header-sticky">
+            <h1 class="h5 m-0 orbitron text-info"><i class="fas fa-gear me-2"></i>Ayarlar</h1>
+            <div class="d-flex gap-2 legacy-page-nav">
+                <a href="/" class="btn btn-outline-secondary btn-sm" title="Web Sitesine Dön"><i class="fas fa-house"></i></a>
+                <a href="/profile" class="btn btn-outline-info btn-sm">Profile Dön</a>
+            </div>
+        </div>
+
+        <div class="settings-tabs" role="tablist">
+            <button type="button" class="settings-tab active" data-target="hesap"><i class="fas fa-id-badge me-1"></i>Hesap</button>
+            <button type="button" class="settings-tab" data-target="bildirim"><i class="fas fa-bell me-1"></i>Bildirimler</button>
+            <button type="button" class="settings-tab danger" data-target="tehlike"><i class="fas fa-triangle-exclamation me-1"></i>Tehlikeli Bölge</button>
+        </div>
+
+        <!-- HESAP -->
+        <div class="settings-section" data-panel="hesap">
+            <div class="settings-panel">
+                <h6 class="fw-bold mb-3 text-info"><i class="fas fa-id-badge me-2"></i>Hesap Bilgileri</h6>
+                <form action="/profile" method="POST" class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small">Ad Soyad</label>
+                        <input class="form-control" name="ad" value="<%= user.ad %>" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small">Email</label>
+                        <input class="form-control" name="email" type="email" value="<%= user.email %>" required>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label small">Yeni Şifre</label>
+                        <input class="form-control" name="newPassword" type="password" placeholder="Değiştirmek istemiyorsan boş bırak">
+                    </div>
+                    <div class="col-12 mt-3">
+                        <button class="btn btn-info fw-bold w-100 py-2">Değişiklikleri Kaydet</button>
+                    </div>
+                </form>
+            </div>
+            <div class="support-row">
+                <i class="fas fa-headset"></i>
+                <div class="flex-grow-1">
+                    <div class="fw-bold small">Sorun mu yaşıyorsunuz?</div>
+                    <div class="text-secondary" style="font-size:12px;">Destek ekibine yazın — teknik sorun, hesap veya geri bildirim.</div>
+                </div>
+                <a href="/destek" class="btn btn-sm btn-outline-info">Destek</a>
+            </div>
+        </div>
+
+        <!-- BİLDİRİMLER -->
+        <div class="settings-section d-none" data-panel="bildirim">
+            <div class="settings-panel">
+                <h6 class="fw-bold mb-1 text-warning"><i class="fas fa-bell me-2"></i>Bildirim Tercihleri</h6>
+                <p class="small text-secondary mb-3">Tercihleriniz kaydedilir; e-posta gönderimi altyapısı eklendiğinde kullanılmaya başlanacaktır.</p>
+                <div class="d-flex justify-content-between align-items-center py-2 border-bottom border-secondary border-opacity-25">
+                    <div>
+                        <div class="fw-bold small">E-posta bildirimleri</div>
+                        <div class="text-secondary" style="font-size:11px;">Önemli güncellemeler için e-posta alın</div>
+                    </div>
+                    <div class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="notifEmail" <%= user.email_notifications !== false ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-2">
+                    <div>
+                        <div class="fw-bold small">Çalışma hatırlatıcıları</div>
+                        <div class="text-secondary" style="font-size:11px;">Günlük hedefler için hatırlatıcılar</div>
+                    </div>
+                    <div class="form-check form-switch m-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="notifStudy" <%= user.study_reminders !== false ? 'checked' : '' %>>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TEHLİKELİ BÖLGE -->
+        <div class="settings-section d-none" data-panel="tehlike">
+            <div class="settings-panel danger-panel">
+                <h6 class="fw-bold mb-1" style="color:#f87171;"><i class="fas fa-triangle-exclamation me-2"></i>Tehlikeli Bölge</h6>
+                <p class="small text-secondary mb-3">Hesabınızı sildiğinizde tüm analiz ve hata defteri verileriniz kalıcı olarak silinir. Bu işlem geri alınamaz.</p>
+                <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal"><i class="fas fa-trash me-1"></i>Hesabımı Sil</button>
+            </div>
+        </div>
+    </main>
+
+    <!-- HESAP SİLME ONAY MODALI -->
+    <div class="modal fade" id="deleteAccountModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light border border-danger">
+                <div class="modal-header border-secondary">
+                    <h5 class="modal-title text-danger"><i class="fas fa-triangle-exclamation me-2"></i>Hesabını Sil</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-secondary">Bu işlem geri alınamaz. Tüm analizlerin, hata defteri kayıtların ve hesabın kalıcı olarak silinecek. Devam etmek için şifreni gir:</p>
+                    <input type="password" id="deleteAccountPassword" class="form-control" placeholder="Şifreniz">
+                </div>
+                <div class="modal-footer border-secondary">
+                    <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
+                    <button class="btn btn-danger btn-sm fw-bold" id="confirmDeleteBtn" onclick="confirmDeleteAccount()">Evet, Hesabımı Sil</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const CURRENT_USER_ID = <%- JSON.stringify(user.id) %>;
+
+        document.querySelectorAll('.settings-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const key = tab.dataset.target;
+                document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t === tab));
+                document.querySelectorAll('.settings-section').forEach(s => s.classList.toggle('d-none', s.dataset.panel !== key));
+            });
+        });
+
+        async function saveNotificationPrefs() {
+            const res = await fetch('/api/update-notifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: CURRENT_USER_ID,
+                    email_notifications: document.getElementById('notifEmail').checked,
+                    study_reminders: document.getElementById('notifStudy').checked
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (data.success) { showToast('Bildirim tercihleri kaydedildi.', 'success'); }
+            else { showToast(data.message || 'Kaydedilemedi.', 'error'); }
+        }
+        document.getElementById('notifEmail').addEventListener('change', saveNotificationPrefs);
+        document.getElementById('notifStudy').addEventListener('change', saveNotificationPrefs);
+
+        async function confirmDeleteAccount() {
+            const password = document.getElementById('deleteAccountPassword').value;
+            if (!password) { showToast('Devam etmek için şifreni gir.', 'error'); return; }
+            const btn = document.getElementById('confirmDeleteBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-circle-notch fa-spin me-1"></i>Siliniyor...';
+            try {
+                const res = await fetch('/api/delete-account', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: CURRENT_USER_ID, password })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (data.success) {
+                    showToast('Hesabın silindi. Yönlendiriliyorsun...', 'success');
+                    setTimeout(() => { window.location.href = '/'; }, 1200);
+                } else {
+                    showToast(data.message || 'Hesap silinemedi.', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = 'Evet, Hesabımı Sil';
+                }
+            } catch (e) {
+                showToast('Sunucuya bağlanılamadı.', 'error');
+                btn.disabled = false;
+                btn.innerHTML = 'Evet, Hesabımı Sil';
+            }
+        }
+    </script>
+</body>
+</html>

@@ -38,15 +38,28 @@
         background: var(--card-glass);
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 14px;
-        padding: 18px 12px;
+        padding: 18px 8px;
         height: 100%;
         text-align: center;
         transition: 0.25s;
+        overflow: hidden;
+        box-sizing: border-box;
     }
     .stat-tile:hover { transform: translateY(-3px); border-color: rgba(13,202,240,0.35); }
     .stat-tile .stat-icon { font-size: 1.1rem; margin-bottom: 8px; opacity: 0.85; }
-    .stat-tile .stat-label { color: #94a3b8; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
-    .stat-tile .stat-value { font-size: 1.4rem; margin: 0; }
+    .stat-tile .stat-label {
+        color: #94a3b8; font-size: clamp(0.58rem, 2.2vw, 0.72rem); text-transform: uppercase;
+        letter-spacing: 0.5px; display: block; margin-bottom: 6px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* clamp() ile taşan/yamuk kesilen değer metni yerine ekran genişliğine
+       göre otomatik küçülen bir font kullanılıyor (ör. "Başlangıç" yazan
+       Gelişim İndeksi hücresi dar mobil sütunlarda taşıp kesiliyordu). */
+    .stat-tile .stat-value {
+        font-size: clamp(0.85rem, 4.5vw, 1.4rem); margin: 0;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        max-width: 100%;
+    }
     .sidebar-link { display: block; padding: 12px 16px; color: #94a3b8; text-decoration: none; border-radius: 10px; margin-bottom: 6px; transition: 0.3s; }
     .sidebar-link:hover, .sidebar-link.active { background: rgba(13,202,240,0.10); color: #0dcaf0; }
     .target-bar { height: 12px; background: #0f172a; border-radius: 999px; overflow: hidden; }

@@ -82,7 +82,66 @@ app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
 // Ortama göre çerez ayarı (Lokalde false, canlıda (Render/Firebase) true ve none olur)
 const isProduction = process.env.NODE_ENV === 'production';
 
+// OTURUMLARIN KALICI HALE GETİRİLMESİ:
+// express-session varsayılan olarak oturumları sunucu BELLEĞİNDE tutar
+// (MemoryStore). Bu, her sunucu yeniden başlatmasında (her deploy VEYA
+// Render'ın kendi periyodik/otomatik yeniden başlatmaları) TÜM aktif
+// oturumların sıfırlanmasına yol açıyordu - tekrarlayan "giriş yaptım,
+// sayfa yenilendi, bir daha giriş yapmam gerekti" şikayetinin asıl kök
+// sebebi buydu (UptimeRobot sadece "uykuya dalmayı" önlüyor, bu farklı
+// bir sorun). Firestore'u zaten kullandığımız için, oturumları da orada
+// (ayrı bir "sessions" koleksiyonunde) saklayan basit bir Store yazdık -
+// böylece sunucu yeniden başlasa bile oturumlar hayatta kalıyor.
+// NOT: Bu her istekte Firestore'a küçük bir okuma/yazma ekliyor - ücretsiz
+// kotanın çok altında kalacak kadar küçük bir hobi projesi için önemsiz
+// bir maliyet, ama bilinçli bir trade-off olarak not düşülüyor.
+class FirestoreSessionStore extends session.Store {
+    constructor(firestoreDb) {
+        super();
+        this.db = firestoreDb;
+        this.collectionName = 'sessions';
+    }
+    async get(sid, callback) {
+        try {
+            const doc = await this.db.collection(this.collectionName).doc(sid).get();
+            if (!doc.exists) return callback(null, null);
+            const data = doc.data();
+            if (data.expires && data.expires < Date.now()) {
+                doc.ref.delete().catch(() => {});
+                return callback(null, null);
+            }
+            callback(null, JSON.parse(data.session));
+        } catch (e) {
+            callback(e);
+        }
+    }
+    async set(sid, sessionData, callback) {
+        try {
+            const maxAge = (sessionData.cookie && sessionData.cookie.maxAge) || (1000 * 60 * 60 * 24);
+            await this.db.collection(this.collectionName).doc(sid).set({
+                session: JSON.stringify(sessionData),
+                expires: Date.now() + maxAge
+            });
+            callback(null);
+        } catch (e) {
+            callback(e);
+        }
+    }
+    async destroy(sid, callback) {
+        try {
+            await this.db.collection(this.collectionName).doc(sid).delete();
+            callback(null);
+        } catch (e) {
+            callback(e);
+        }
+    }
+    touch(sid, sessionData, callback) {
+        return this.set(sid, sessionData, callback);
+    }
+}
+
 app.use(session({
+    store: new FirestoreSessionStore(db),
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
@@ -768,6 +827,44 @@ app.get('/dashboard', requireLogin, async (req, res) => {
 // ==========================================
 // 8. PROFİL, ÖDEME VE VİDEO LABORATUVARI
 // ==========================================
+// Rozet sistemi: hepsi kullanıcının GERÇEK verisinden (kaç analiz yaptı, kaç
+// yanlış soru kaydetti, kaç dakika odaklandı, kaç kişi davet etti, vb.)
+// hesaplanıyor - hiçbiri sabit/gösterişlik değil, ya kazanılmış ya da kilitli.
+function computeBadges({ analizler, wrongCount, pomodoroDakika, referralCount, kocSayisi, isPremium }) {
+    const analizCount = analizler.length;
+    const maxNet = analizler.reduce((max, a) => Math.max(max, Number(a.toplam_net || 0)), 0);
+    const sinavTurleri = new Set(analizler.map(a => (a.sinav_turu || 'TYT').split('_')[0]));
+    const hepsiVar = ['TYT', 'AYT', 'KPSS', 'LGS'].every(t => sinavTurleri.has(t));
+
+    return [
+        { icon: 'fa-shoe-prints', name: 'İlk Adım', desc: 'İlk net analizini kaydettin', earned: analizCount >= 1 },
+        { icon: 'fa-chart-line', name: 'Analist', desc: '5 net analizi kaydettin', earned: analizCount >= 5 },
+        { icon: 'fa-chart-column', name: 'Uzman Analist', desc: '15 net analizi kaydettin', earned: analizCount >= 15 },
+        { icon: 'fa-medal', name: 'Sınav Ustası', desc: '30 net analizi kaydettin', earned: analizCount >= 30 },
+        { icon: 'fa-graduation-cap', name: 'TYT Kaşifi', desc: 'En az bir TYT analizi yaptın', earned: sinavTurleri.has('TYT') },
+        { icon: 'fa-flask', name: 'AYT Kaşifi', desc: 'En az bir AYT analizi yaptın', earned: sinavTurleri.has('AYT') },
+        { icon: 'fa-landmark', name: 'KPSS Kaşifi', desc: 'En az bir KPSS analizi yaptın', earned: sinavTurleri.has('KPSS') },
+        { icon: 'fa-school', name: 'LGS Kaşifi', desc: 'En az bir LGS analizi yaptın', earned: sinavTurleri.has('LGS') },
+        { icon: 'fa-star', name: 'Tam Kadro', desc: 'TYT, AYT, KPSS ve LGS\'nin hepsinden analiz yaptın', earned: hepsiVar },
+        { icon: 'fa-bolt', name: 'Yüksek Skor', desc: 'Bir analizde 100+ net attın', earned: maxNet >= 100 },
+        { icon: 'fa-crown', name: 'Mükemmeliyetçi', desc: 'Bir analizde 110+ net attın', earned: maxNet >= 110 },
+        { icon: 'fa-magnifying-glass', name: 'Hatasını Gören', desc: 'İlk yanlış soruyu hata defterine kaydettin', earned: wrongCount >= 1 },
+        { icon: 'fa-book-open', name: 'Titiz Öğrenci', desc: '10 yanlış soru kaydettin', earned: wrongCount >= 10 },
+        { icon: 'fa-magnet', name: 'Hata Avcısı', desc: '25 yanlış soru kaydettin', earned: wrongCount >= 25 },
+        { icon: 'fa-clock', name: 'Odaklanma Başlangıcı', desc: 'İlk pomodoro seansını tamamladın', earned: pomodoroDakika >= 25 },
+        { icon: 'fa-stopwatch', name: 'Odak Ustası', desc: 'Toplam 5 saat odaklandın', earned: pomodoroDakika >= 300 },
+        { icon: 'fa-fire', name: 'Demir İrade', desc: 'Toplam 20 saat odaklandın', earned: pomodoroDakika >= 1200 },
+        { icon: 'fa-person-running', name: 'Maraton Koşucusu', desc: 'Toplam 50 saat odaklandın', earned: pomodoroDakika >= 3000 },
+        { icon: 'fa-user-tie', name: 'Koça Bağlandın', desc: 'Bir eğitim koçuna bağlandın', earned: kocSayisi >= 1 },
+        { icon: 'fa-paper-plane', name: 'Davetçi', desc: 'İlk arkadaşını davet ettin', earned: referralCount >= 1 },
+        { icon: 'fa-people-group', name: 'Topluluk Elçisi', desc: '5 arkadaş davet ettin', earned: referralCount >= 5 },
+        { icon: 'fa-certificate', name: 'Premium Üye', desc: "Premium'a yükseldin", earned: isPremium },
+        { icon: 'fa-hand-sparkles', name: 'Hoş Geldin', desc: 'SmartStudy ailesine katıldın', earned: true },
+        { icon: 'fa-layer-group', name: 'Çok Yönlü', desc: 'Net analizi, hata defteri ve pomodoro\'nun hepsini kullandın', earned: analizCount >= 1 && wrongCount >= 1 && pomodoroDakika >= 1 },
+        { icon: 'fa-infinity', name: 'Azimli', desc: '15 saat odaklan + 15 analiz + 15 yanlış soru kaydı', earned: pomodoroDakika >= 900 && analizCount >= 15 && wrongCount >= 15 }
+    ];
+}
+
 app.get('/profile', requireLogin, async (req, res) => {
     const user = await currentUser(req);
     if (!user) return res.redirect('/login');
@@ -776,6 +873,7 @@ app.get('/profile', requireLogin, async (req, res) => {
         db.collection('analizler').where('user_id', '==', user.id).get(),
         db.collection('wrong_questions').where('user_id', '==', user.id).get()
     ]);
+    const analizler = analizSnap.docs.map(d => d.data());
 
     const pomodoroDakika = Number(user.pomodoro_dakika || 0);
     const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
@@ -790,6 +888,15 @@ app.get('/profile', requireLogin, async (req, res) => {
     const referralCount = Number(user.referral_count || 0);
     const referralRemaining = 10 - (referralCount % 10);
 
+    const badges = computeBadges({
+        analizler,
+        wrongCount: wrongSnap.size,
+        pomodoroDakika,
+        referralCount,
+        kocSayisi: kocListesi.length,
+        isPremium: user.level === 'Premium'
+    });
+
     res.render('profile', {
         user,
         analizCount: analizSnap.size,
@@ -798,8 +905,18 @@ app.get('/profile', requireLogin, async (req, res) => {
         kocListesi,
         referralCode,
         referralCount,
-        referralRemaining
+        referralRemaining,
+        badges
     });
+});
+
+// Hesap ayarları artık Profil sayfasından ayrı: kimlik/rozet/istatistikler
+// /profile'da, hesap yönetimi (bilgiler, bildirimler, tehlikeli bölge)
+// burada. İçerik aynı verilerle çalışıyor, sadece ayrı bir sayfa/rota.
+app.get('/ayarlar', requireLogin, async (req, res) => {
+    const user = await currentUser(req);
+    if (!user) return res.redirect('/login');
+    res.render('ayarlar', { user });
 });
 
 app.post('/profile', requireLogin, async (req, res) => {

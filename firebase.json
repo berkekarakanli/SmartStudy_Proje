@@ -8,6 +8,7 @@
       "partials/**",
       "add-video.html",
       "analysis.html",
+      "ayarlar.html",
       "dashboard-student.html",
       "dashboard-teacher.html",
       "destek.html",
@@ -94,6 +95,11 @@
       {
         "source": "/destek",
         "destination": "https://smartstudy-proje.onrender.com/destek",
+        "type": 302
+      },
+      {
+        "source": "/ayarlar",
+        "destination": "https://smartstudy-proje.onrender.com/ayarlar",
         "type": 302
       }
     ]

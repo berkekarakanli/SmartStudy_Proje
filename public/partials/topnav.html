@@ -115,6 +115,7 @@
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
                 <li><a class="dropdown-item" href="/profile"><i class="fas fa-user w-100" style="max-width:16px;"></i>Profilim</a></li>
+                <li><a class="dropdown-item" href="/ayarlar"><i class="fas fa-gear w-100" style="max-width:16px;"></i>Ayarlar</a></li>
                 <% if (user.role !== 'teacher') { %>
                 <li><a class="dropdown-item <%= user.level === 'Premium' ? 'text-warning' : '' %>" href="/payment"><i class="fas fa-crown w-100" style="max-width:16px;"></i><%= user.level === 'Premium' ? 'Premium Üye' : "Premium'a Yükselt" %></a></li>
                 <% } %>

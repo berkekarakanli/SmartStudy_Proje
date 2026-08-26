@@ -76,6 +76,25 @@
 
         .back-home { color: #64748b; text-decoration: none; font-size: 0.85rem; }
         .back-home:hover { color: var(--theme-color); }
+
+        /* MASKOT: rol seçilince örümcek (Öğrenci) iniyor / ampul (Öğretmen)
+           sallanıyor - Goal Lab'daki sade tasarımdan bilerek ayrışan, bizim
+           eski split-panel giriş ekranımızdan taşınan bir imza detay. */
+        .mascot-zone { height: 46px; display: flex; align-items: flex-start; justify-content: center; margin-bottom: 4px; }
+        .mascot-web-line { width: 2px; margin: 0 auto; background: linear-gradient(to bottom, rgba(255,255,255,0.05), rgba(255,255,255,0.6)); transition: height 0.3s ease; }
+        .mascot-icon-wrap { display: flex; flex-direction: column; align-items: center; }
+        .mascot-icon { font-size: 1.7rem; display: block; }
+        @keyframes mascotDrop {
+            0% { transform: translateY(-30px) rotate(var(--mascot-rot, 0deg)); opacity: 0; }
+            60% { transform: translateY(5px) rotate(var(--mascot-rot, 0deg)); opacity: 1; }
+            100% { transform: translateY(0) rotate(var(--mascot-rot, 0deg)); opacity: 1; }
+        }
+        @keyframes mascotSwing {
+            0%, 100% { transform: rotate(calc(var(--mascot-rot, 0deg) - 12deg)); }
+            50% { transform: rotate(calc(var(--mascot-rot, 0deg) + 12deg)); }
+        }
+        .mascot-icon.mascot-drop { animation: mascotDrop 0.6s cubic-bezier(0.68, -0.55, 0.26, 1.55); }
+        .mascot-icon.mascot-swing { animation: mascotSwing 1.8s ease-in-out infinite; animation-delay: 0.6s; transform-origin: top center; }
     </style>
 </head>
 <body>
@@ -112,6 +131,12 @@
         }
     </script>
 
+    <div class="mascot-zone">
+        <div class="mascot-icon-wrap">
+            <div class="mascot-web-line" id="mascotLine" style="height:20px;"></div>
+            <i class="fas fa-spider mascot-icon mascot-drop" id="mascotIcon" style="color:#dc3545; --mascot-rot:180deg; filter:drop-shadow(0 0 10px rgba(220,53,69,.6));"></i>
+        </div>
+    </div>
     <div class="login-card">
         <div class="text-center mb-4">
             <i class="fas fa-shield-halved fa-2x mb-2" style="color: var(--theme-color); filter: drop-shadow(0 0 10px var(--theme-shadow));"></i>
@@ -179,6 +204,33 @@
                 root.style.setProperty('--theme-shadow', 'rgba(255, 193, 7, 0.4)');
                 teacherBtn.classList.add('active');
                 studentBtn.classList.remove('active');
+            }
+            playMascot(role);
+        }
+
+        function playMascot(role) {
+            const icon = document.getElementById('mascotIcon');
+            const line = document.getElementById('mascotLine');
+            // Animasyonu yeniden başlatabilmek için sınıfları kaldırıp bir
+            // reflow'a zorluyoruz (yoksa aynı sınıf tekrar eklenince tarayıcı
+            // "değişiklik yok" deyip animasyonu atlıyor).
+            icon.classList.remove('mascot-drop', 'mascot-swing');
+            void icon.offsetWidth;
+
+            if (role === 'student') {
+                icon.className = 'fas fa-spider mascot-icon';
+                icon.style.color = '#dc3545';
+                icon.style.setProperty('--mascot-rot', '180deg');
+                icon.style.filter = 'drop-shadow(0 0 10px rgba(220,53,69,.6))';
+                line.style.height = '20px';
+                icon.classList.add('mascot-drop');
+            } else {
+                icon.className = 'fas fa-lightbulb mascot-icon';
+                icon.style.color = 'var(--theme-color)';
+                icon.style.setProperty('--mascot-rot', '0deg');
+                icon.style.filter = 'drop-shadow(0 0 12px var(--theme-shadow))';
+                line.style.height = '16px';
+                icon.classList.add('mascot-drop', 'mascot-swing');
             }
         }
 
