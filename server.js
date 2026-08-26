@@ -731,8 +731,13 @@ app.get('/dashboard', requireLogin, async (req, res) => {
             }
 
             const examGroups = groupAnalizlerByExamType(analizler);
+            // Sekmeler arasından varsayılan olarak açık gelecek olanı, kullanıcının
+            // EN SON girdiği (tarihe göre) analizin sınav türü belirliyor.
+            const defaultActiveKey = analizler.length > 0
+                ? (analizler[analizler.length - 1].sinav_turu || 'TYT')
+                : null;
 
-            res.render('dashboard-student', { user, analizler, analizSayisi, sonNet, gelisim, gelisimClass, examGroups });
+            res.render('dashboard-student', { user, analizler, analizSayisi, sonNet, gelisim, gelisimClass, examGroups, defaultActiveKey });
         }
     } catch (error) {
         console.error(error);

@@ -18,6 +18,10 @@
             margin: -1.5rem -1.5rem 1.5rem;
             position: sticky; top: 0; z-index: 30;
         }
+        /* Masaüstünde artık partials/topnav.html aynı işi görüyor; bu eski
+           bar sadece mobilde (topnav gizliyken) kalıyor ki geri dönüş linki
+           kaybolmasın. */
+        @media (min-width: 768px) { .appbar { display: none; } }
         .appbar .brand { display:flex; align-items:center; gap:8px; color:var(--accent-blue); font-weight:700; letter-spacing:2px; font-size:15px; }
         .level-pill {
             display:inline-flex; align-items:center; gap:4px;
@@ -26,9 +30,27 @@
             text-decoration: none;
         }
         .level-pill.is-premium { background: rgba(255,193,7,0.15); color:#ffc107; border-color: rgba(255,193,7,0.5); }
+
+        /* SINAV MODÜLÜ SEÇİCİ - her sınav türünü (TYT/AYT/KPSS/LGS) tek
+           seferde bir tanesi görünür şekilde göstermek için glow'lu, sekmeli
+           bir seçici. Amaç: hepsini alt alta yığıp gözü yormak yerine, aktif
+           olan modülü öne çıkarmak. */
+        .module-tabs { display:flex; gap:6px; flex-wrap:wrap; padding:6px; background:#0f172a; border:1px solid rgba(13,202,240,0.15); border-radius:14px; margin-bottom:1.25rem; }
+        .module-tab {
+            flex:1; min-width:92px;
+            background:transparent; border:1px solid transparent; color:#64748b;
+            font-family:'Orbitron',sans-serif; font-size:10.5px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+            padding:10px 10px; border-radius:10px; display:flex; align-items:center; justify-content:center; gap:6px;
+            transition:.25s; cursor:pointer;
+        }
+        .module-tab .dot { width:6px; height:6px; border-radius:50%; background:#334155; transition:.25s; flex-shrink:0; }
+        .module-tab:hover { color:#cbd5e1; }
+        .module-tab.active { color:#020617; background:linear-gradient(135deg,#0dcaf0,#0ea5c4); box-shadow:0 0 18px rgba(13,202,240,0.5); }
+        .module-tab.active .dot { background:#020617; }
     </style>
 </head>
 <body class="p-4">
+    <%- include('partials/topnav.html', { user, activeTab: 'ozet' }) %>
     <main class="container-fluid" style="max-width: 900px;">
         <div class="appbar">
             <a href="/" class="brand orbitron text-decoration-none" title="Web Sitesine Dön"><i class="fas fa-microchip"></i>SMARTSTUDY OS</a>
@@ -63,55 +85,74 @@
         </div>
         <% } %>
 
-        <% examGroups.forEach(group => { %>
-        <div class="glass mb-4">
-            <h6 class="text-info orbitron mb-3" style="letter-spacing:1px;">GELİŞİM TREND GRAFİĞİ — <%= group.label %></h6>
-            <div style="position:relative; height:220px;"><canvas id="trendChart_<%= group.key %>"></canvas></div>
+        <% if (examGroups.length > 0) { %>
+        <div class="module-tabs" role="tablist">
+            <% examGroups.forEach(group => { %>
+            <button type="button" class="module-tab <%= group.key === defaultActiveKey ? 'active' : '' %>" data-target="<%= group.key %>">
+                <span class="dot"></span><%= group.label %>
+            </button>
+            <% }) %>
         </div>
+        <% } %>
 
-        <div class="glass mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h6 class="text-info orbitron m-0" style="letter-spacing:1px;">GEÇMİŞ ANALİZLER — <%= group.label %></h6>
-                <span class="text-secondary" style="font-size:10px;">Kayıtları kaydırabilirsiniz</span>
+        <% examGroups.forEach(group => { %>
+        <div class="module-panel <%= group.key === defaultActiveKey ? '' : 'd-none' %>" data-panel="<%= group.key %>">
+            <div class="glass mb-4">
+                <h6 class="text-info orbitron mb-3" style="letter-spacing:1px;">GELİŞİM TREND GRAFİĞİ — <%= group.label %></h6>
+                <div style="position:relative; height:220px;"><canvas id="trendChart_<%= group.key %>"></canvas></div>
             </div>
-            <div class="table-responsive">
-                <table class="table table-dark table-hover text-center align-middle">
-                    <thead>
-                        <tr>
-                            <th>Tarih</th>
-                            <% group.fields.forEach(f => { %><th><%= f[1] %></th><% }) %>
-                            <th>Toplam</th>
-                            <th>Sil</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <% group.entries.forEach(a => { %>
+
+            <div class="glass mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="text-info orbitron m-0" style="letter-spacing:1px;">GEÇMİŞ ANALİZLER — <%= group.label %></h6>
+                    <span class="text-secondary" style="font-size:10px;">Kayıtları kaydırabilirsiniz</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover text-center align-middle">
+                        <thead>
                             <tr>
-                                <td><%= a.tarih ? new Date(a.tarih).toLocaleDateString('tr-TR') : '-' %></td>
-                                <% a.fieldValues.forEach(v => { %><td><%= v %></td><% }) %>
-                                <td class="text-info fw-bold"><%= a.toplam_net || 0 %></td>
-                                <td>
-                                    <form action="/delete-analysis" method="POST" class="m-0">
-                                        <input type="hidden" name="analizId" value="<%= a.id %>">
-                                        <button class="btn btn-sm btn-outline-danger py-0"><i class="fas fa-trash small"></i></button>
-                                    </form>
-                                </td>
+                                <th>Tarih</th>
+                                <% group.fields.forEach(f => { %><th><%= f[1] %></th><% }) %>
+                                <th>Toplam</th>
+                                <th>Sil</th>
                             </tr>
-                        <% }) %>
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            <% group.entries.forEach(a => { %>
+                                <tr>
+                                    <td><%= a.tarih ? new Date(a.tarih).toLocaleDateString('tr-TR') : '-' %></td>
+                                    <% a.fieldValues.forEach(v => { %><td><%= v %></td><% }) %>
+                                    <td class="text-info fw-bold"><%= a.toplam_net || 0 %></td>
+                                    <td>
+                                        <form action="/delete-analysis" method="POST" class="m-0">
+                                            <input type="hidden" name="analizId" value="<%= a.id %>">
+                                            <button class="btn btn-sm btn-outline-danger py-0"><i class="fas fa-trash small"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
         <% }) %>
     </main>
     <%- include('partials/bottom-nav.html', { activeTab: 'ozet', user }) %>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Her modülün grafiği baştan (görünür olmasa bile) oluşturuluyor;
+        // sekme değiştiğinde gizli kalmış grafiklerin 0x0 boyutunda
+        // donmasını önlemek için sekmeye tıklanınca ilgili chart.resize()
+        // çağrılıyor.
+        window.__moduleCharts = window.__moduleCharts || {};
+    </script>
     <% examGroups.forEach(group => { %>
     <script>
         (function () {
             const ctx = document.getElementById('trendChart_<%= group.key %>');
             if (!ctx) return;
-            new Chart(ctx, {
+            window.__moduleCharts['<%= group.key %>'] = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: <%- JSON.stringify(group.entries.map((a, i) => (i + 1) + '.Deneme')) %>,
@@ -134,5 +175,16 @@
         })();
     </script>
     <% }) %>
+    <script>
+        document.querySelectorAll('.module-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const key = tab.dataset.target;
+                document.querySelectorAll('.module-tab').forEach(t => t.classList.toggle('active', t === tab));
+                document.querySelectorAll('.module-panel').forEach(p => p.classList.toggle('d-none', p.dataset.panel !== key));
+                const chart = window.__moduleCharts[key];
+                if (chart) chart.resize();
+            });
+        });
+    </script>
 </body>
 </html>

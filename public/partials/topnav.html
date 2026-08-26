@@ -1,0 +1,102 @@
+<!--
+  Paylaşılan, "profesyonel web sitesi" tarzı üst gezinme çubuğu. Masaüstü
+  genişliklerinde görünür (yüzen, yuvarlak köşeli, pill-stilli menü öğeleri +
+  sağda avatar/dropdown); mobilde gizlenir ve yerini zaten var olan
+  partials/bottom-nav.html alır (Flutter'daki alt menüyle birebir eşleşen o
+  bileşen mobilde daha doğru bir desen). `user` ve `activeTab` parametreleriyle
+  include edilir (bkz. dashboard-student.html).
+-->
+<style>
+    /* Sadece masaüstünde ekstra üst boşluk ekleniyor (topnav orada sabit/
+       yüzer durumda). Mobilde topnav zaten gizli, bu yüzden sayfanın kendi
+       padding/negatif-margin hesaplarına (ör. dashboard-student.html'deki
+       .appbar) hiç dokunmuyoruz. */
+    @media (min-width: 768px) { body { padding-top: 86px !important; } }
+
+    .topnav-wrap {
+        position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+        width: min(980px, calc(100% - 32px));
+        z-index: 1060;
+    }
+    @media (max-width: 767.98px) { .topnav-wrap { display: none; } }
+
+    .topnav {
+        display: flex; align-items: center; gap: 18px;
+        background: rgba(15,23,42,0.85);
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 999px;
+        padding: 8px 10px 8px 18px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    .topnav-brand {
+        display: flex; align-items: center; gap: 8px;
+        color: var(--accent-blue, #0dcaf0); font-weight: 700; letter-spacing: 1.5px;
+        font-size: 13px; text-decoration: none; white-space: nowrap;
+    }
+    .topnav-links { display: flex; align-items: center; gap: 2px; flex: 1; justify-content: center; flex-wrap: wrap; }
+    .topnav-links a {
+        display: flex; align-items: center; gap: 7px;
+        color: #94a3b8; text-decoration: none; font-size: 12.5px; font-weight: 600;
+        padding: 8px 14px; border-radius: 999px; white-space: nowrap;
+        transition: 0.2s;
+    }
+    .topnav-links a i { font-size: 13px; }
+    .topnav-links a:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
+    .topnav-links a.active { color: #020617; background: var(--accent-blue, #0dcaf0); font-weight: 700; }
+    .topnav-user { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .topnav-avatar {
+        width: 34px; height: 34px; border-radius: 50%;
+        background: rgba(13,202,240,0.15); color: var(--accent-blue, #0dcaf0);
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 13px; flex-shrink: 0;
+        border: none; cursor: pointer;
+    }
+    .topnav-user .dropdown-toggle::after { display: none; }
+    .topnav-user .dropdown-menu {
+        background: #0f172a; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px;
+        padding: 8px; min-width: 210px;
+    }
+    .topnav-user .dropdown-item { color: #cbd5e1; border-radius: 8px; padding: 9px 12px; font-size: 13px; display: flex; align-items: center; gap: 9px; }
+    .topnav-user .dropdown-item:hover { background: rgba(13,202,240,0.12); color: #e2e8f0; }
+    .topnav-user .dropdown-item.text-warning:hover { background: rgba(255,193,7,0.12); }
+    .topnav-user .dropdown-item.text-danger:hover { background: rgba(220,53,69,0.12); }
+    .topnav-user .dropdown-divider { border-color: rgba(255,255,255,0.08); margin: 6px 4px; }
+</style>
+
+<div class="topnav-wrap">
+    <nav class="topnav">
+        <a href="/" class="topnav-brand" title="Web Sitesine Dön"><i class="fas fa-microchip"></i>SMARTSTUDY</a>
+
+        <div class="topnav-links">
+            <% if (user.role === 'teacher') { %>
+                <a href="/dashboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'ozet' ? 'active' : '' %>"><i class="fas fa-table-columns"></i>Panel</a>
+                <a href="/plan" class="<%= typeof activeTab !== 'undefined' && activeTab === 'analiz' ? 'active' : '' %>"><i class="fas fa-chart-line"></i>Ödev Ata</a>
+                <a href="/add-video" class="<%= typeof activeTab !== 'undefined' && activeTab === 'video' ? 'active' : '' %>"><i class="fas fa-video"></i>Video Ekle</a>
+            <% } else { %>
+                <a href="/dashboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'ozet' ? 'active' : '' %>"><i class="fas fa-table-columns"></i>Özet</a>
+                <a href="/plan" class="<%= typeof activeTab !== 'undefined' && activeTab === 'analiz' ? 'active' : '' %>"><i class="fas fa-chart-line"></i>Analiz</a>
+                <a href="/wrong-questions" class="<%= typeof activeTab !== 'undefined' && activeTab === 'hatadefteri' ? 'active' : '' %>"><i class="fas fa-book"></i>Hata Defteri</a>
+                <a href="/pomodoro" class="<%= typeof activeTab !== 'undefined' && activeTab === 'pomodoro' ? 'active' : '' %>"><i class="fas fa-stopwatch"></i>Pomodoro</a>
+                <a href="/student-coach" class="<%= typeof activeTab !== 'undefined' && activeTab === 'kocum' ? 'active' : '' %>"><i class="fas fa-user-tie"></i>Koçum</a>
+                <a href="/leaderboard" class="<%= typeof activeTab !== 'undefined' && activeTab === 'liderlik' ? 'active' : '' %>"><i class="fas fa-trophy"></i>Liderlik</a>
+            <% } %>
+        </div>
+
+        <div class="topnav-user dropdown">
+            <button class="topnav-avatar dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="<%= user.ad || user.email %>">
+                <%= (user.ad || user.email || '?').trim().charAt(0).toUpperCase() %>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="/profile"><i class="fas fa-user w-100" style="max-width:16px;"></i>Profilim</a></li>
+                <% if (user.role !== 'teacher') { %>
+                <li><a class="dropdown-item <%= user.level === 'Premium' ? 'text-warning' : '' %>" href="/payment"><i class="fas fa-crown w-100" style="max-width:16px;"></i><%= user.level === 'Premium' ? 'Premium Üye' : "Premium'a Yükselt" %></a></li>
+                <% } %>
+                <li><a class="dropdown-item" href="/destek"><i class="fas fa-headset w-100" style="max-width:16px;"></i>Destek</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="/"><i class="fas fa-house w-100" style="max-width:16px;"></i>Web Sitesi Anasayfası</a></li>
+                <li><a class="dropdown-item text-danger" href="/logout"><i class="fas fa-power-off w-100" style="max-width:16px;"></i>Çıkış Yap</a></li>
+            </ul>
+        </div>
+    </nav>
+</div>
