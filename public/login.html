@@ -298,13 +298,24 @@
             }
 
             .floating-footer {
-                position: static;
-                transform: none;
+                position: static !important;
+                transform: none !important;
                 width: 90%;
                 max-width: 340px;
-                margin: 24px auto 40px;
+                margin: 30px auto 50px !important;
                 padding: 12px 16px;
                 font-size: 0.75rem;
+                bottom: auto !important;
+                left: auto !important;
+            }
+
+            /* Mobil tarayıcıların adres çubuğu 100vh'yi tutarsız hesaplar;
+               dinamik/küçük görünüm birimleri destekleniyorsa onu kullan. */
+            .panel {
+                min-height: 100svh;
+            }
+            .split-container {
+                min-height: 100svh;
             }
         }
 
