@@ -62,7 +62,7 @@
                 <% myAssignedHomeworks.forEach(hw => { %>
                     <li class="mb-2 text-secondary">
                         <i class="fas fa-check-circle text-info me-2"></i><strong>Öğrenci ID (<%= hw.student_id %>):</strong>
-                        <%= hw.exam_type %> - <%= hw.subject %> (<%= (hw.topics || []).join(', ') %>)
+                        <%= hw.exam_type %> - <%= hw.subject %> (<%= (hw.topics || []).join(', ') %>)<% if (hw.question_count) { %> — <span class="text-warning"><%= hw.question_count %> soru</span><% } %>
                     </li>
                 <% }) %>
             </ul>

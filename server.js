@@ -1014,12 +1014,16 @@ app.post('/assign-homework', requireUser, async (req, res) => {
         }
         if (!Array.isArray(assigned_topics)) assigned_topics = [assigned_topics];
 
+        let question_count = parseInt(req.body.question_count, 10);
+        if (!Number.isFinite(question_count) || question_count < 1) question_count = null;
+
         const hwRef = await db.collection('homeworks').add({
             teacher_id: user.id,
             student_id: student_id,
             exam_type,
             subject: subject || 'Genel',
             topics: assigned_topics,
+            question_count,
             date_assigned: new Date().toISOString(),
             status: 'pending',
             completed: false

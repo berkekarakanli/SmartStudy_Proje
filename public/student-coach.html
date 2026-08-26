@@ -56,7 +56,7 @@
                     <div class="form-check m-0">
                         <input class="form-check-input hw-toggle" type="checkbox" data-id="<%= hw.id %>" id="hw-<%= hw.id %>" <%= completed ? 'checked' : '' %>>
                         <label class="form-check-label <%= completed ? 'text-white-50 text-decoration-line-through' : 'text-white' %>" for="hw-<%= hw.id %>">
-                            <strong><%= hw.subject || 'Ders' %></strong> — <%= hw.exam_type || '' %><br>
+                            <strong><%= hw.subject || 'Ders' %></strong> — <%= hw.exam_type || '' %><% if (hw.question_count) { %> <span class="badge bg-warning text-dark"><%= hw.question_count %> soru</span><% } %><br>
                             <span class="text-secondary small"><%= topic %></span>
                         </label>
                     </div>
