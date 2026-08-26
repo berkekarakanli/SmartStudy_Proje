@@ -45,7 +45,10 @@
     <%- include('partials/toast.html') %>
     <div class="topbar">
         <span class="title orbitron"><%= isStudent ? 'NET ANALİZİ & TERMİNAL' : 'EĞİTİM KOÇU TERMİNALİ' %></span>
-        <a href="/dashboard" class="btn btn-sm btn-outline-light">Panele Dön</a>
+        <div class="d-flex gap-2">
+            <a href="/" class="btn btn-sm btn-outline-secondary" title="Web Sitesine Dön"><i class="fas fa-house"></i></a>
+            <a href="/dashboard" class="btn btn-sm btn-outline-light">Panele Dön</a>
+        </div>
     </div>
 
     <div class="wrap">

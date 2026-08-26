@@ -28,7 +28,7 @@
 <body class="p-4">
     <main class="container-fluid" style="max-width: 900px;">
         <div class="appbar">
-            <span class="brand orbitron"><i class="fas fa-microchip"></i>SMARTSTUDY OS</span>
+            <a href="/" class="brand orbitron text-decoration-none" title="Web Sitesine Dön"><i class="fas fa-microchip"></i>SMARTSTUDY OS</a>
             <a href="/payment" class="level-pill <%= user.level === 'Premium' ? 'is-premium' : '' %>">
                 <% if (user.level === 'Premium') { %><i class="fas fa-check-circle"></i><% } %><%= user.level === 'Premium' ? 'Premium' : 'Free Üye' %>
             </a>
