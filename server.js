@@ -70,8 +70,13 @@ const db = getFirestore();
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'smartstudy-dev-secret-change-me';
 
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+// express.json()'ın varsayılan gövde limiti 100kb - hata defterine bir
+// fotoğraf base64 olarak eklenirken (gerçek bir telefon fotoğrafı kolayca
+// birkaç MB oluyor) bu limit aşılıyor, istek sunucuya hiç ulaşmadan 413
+// ile reddediliyordu. O cevap JSON olmadığı için istemcideki res.json()
+// da sessizce patlıyor, kullanıcı ne başarı ne hata mesajı görmüyordu.
+app.use(express.urlencoded({ extended: true, limit: '12mb' }));
+app.use(express.json({ limit: '12mb' }));
 
 // Sadece /audio klasörü statik olarak servis ediliyor (ör. pomodoro alarm
 // sesi). Bilinçli olarak public/'in tamamını statik açmıyoruz - o klasörde
@@ -440,6 +445,15 @@ app.post('/teacher-setup', requireLogin, async (req, res) => {
 
 app.get('/logout', (req, res) => {
     req.session.destroy(() => res.redirect('/'));
+});
+
+// index.html (statik anasayfa - Firebase Hosting'de de yayında) kendi
+// başına giriş durumunu bilemiyor; bu uç, sayfanın üst menüsünün "Giriş
+// Yap/Kayıt Ol" yerine "Hesabım/Çıkış Yap" göstermesi için kullanılıyor.
+app.get('/api/me', async (req, res) => {
+    const user = await currentUser(req);
+    if (!user) return res.json({ loggedIn: false });
+    res.json({ loggedIn: true, ad: user.ad, level: user.level || 'Free' });
 });
 
 // ==========================================
@@ -1347,6 +1361,13 @@ app.post('/api/wrong-questions/add', async (req, res) => {
         }
 
         const { question_text, ai_solution, image_base64 } = req.body;
+        // Firestore doküman başına en fazla 1 MiB veri kabul ediyor. İstemci
+        // fotoğrafı zaten küçültüp sıkıştırıyor ama yine de bir güvenlik
+        // ağı olarak burada da kontrol ediyoruz - aksi halde kullanıcı genel
+        // bir 500 hatası görür, sebebini anlayamaz.
+        if (image_base64 && image_base64.length > 900000) {
+            return res.status(413).json({ success: false, message: 'Fotoğraf çok büyük. Daha küçük bir fotoğraf dene.' });
+        }
         const docRef = await db.collection('wrong_questions').add({
             user_id: user.id,
             question_text: question_text || 'Hatalı Soru Kaydı',

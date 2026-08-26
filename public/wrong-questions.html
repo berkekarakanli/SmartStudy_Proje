@@ -86,26 +86,73 @@
                     return;
                 }
 
+                // Firestore'daki her doküman en fazla 1 MiB olabiliyor.
+                // Gerçek bir telefon fotoğrafı (genelde 2-8 MB) ham haliyle
+                // base64'e çevrilince bunu kolayca aşıyor ve kayıt sessizce
+                // 500 hatasıyla başarısız oluyordu. Bu yüzden fotoğrafı
+                // önce bir <canvas> üzerinden makul bir boyuta küçültüp
+                // JPEG olarak yeniden sıkıştırıyoruz - hem limitin çok
+                // altında kalıyor hem de yükleme çok daha hızlı oluyor.
                 const toBase64 = (f) => new Promise((resolve, reject) => {
                     const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result.split(',').pop());
+                    reader.onload = () => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const MAX_DIM = 1280;
+                            let { width, height } = img;
+                            if (width > MAX_DIM || height > MAX_DIM) {
+                                const scale = MAX_DIM / Math.max(width, height);
+                                width = Math.round(width * scale);
+                                height = Math.round(height * scale);
+                            }
+                            const canvas = document.createElement('canvas');
+                            canvas.width = width;
+                            canvas.height = height;
+                            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                            resolve(canvas.toDataURL('image/jpeg', 0.72).split(',').pop());
+                        };
+                        img.onerror = reject;
+                        img.src = reader.result;
+                    };
                     reader.onerror = reject;
                     reader.readAsDataURL(f);
                 });
 
-                const image_base64 = file ? await toBase64(file) : '';
-                const res = await fetch('/api/wrong-questions/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        userId: CURRENT_USER_ID,
-                        question_text: 'Hatalı Soru Kaydı',
-                        ai_solution: note || 'Not girilmemiş.',
-                        image_base64
-                    })
-                });
-                const data = await res.json();
-                if (data.success) { location.reload(); } else { showToast(data.message || 'Soru eklenemedi.', 'error'); }
+                const submitBtn = addForm.querySelector('button[type=submit]');
+                const originalBtnText = submitBtn.innerHTML;
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>';
+                try {
+                    const image_base64 = file ? await toBase64(file) : '';
+                    const res = await fetch('/api/wrong-questions/add', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            userId: CURRENT_USER_ID,
+                            question_text: 'Hatalı Soru Kaydı',
+                            ai_solution: note || 'Not girilmemiş.',
+                            image_base64
+                        })
+                    });
+                    if (!res.ok) {
+                        // Sunucu hata JSON'ı değil de düz metin/HTML dönmüş
+                        // olabilir (ör. gövde çok büyükse 413) - yine de bir
+                        // şey göstermek için res.json() başarısız olursa
+                        // duruma göre bir mesaj üretiyoruz.
+                        const data = await res.json().catch(() => null);
+                        const msg = data && data.message ? data.message
+                            : (res.status === 413 ? 'Fotoğraf çok büyük. Daha küçük bir fotoğraf dene.' : 'Soru eklenemedi (sunucu hatası).');
+                        showToast(msg, 'error');
+                        return;
+                    }
+                    const data = await res.json();
+                    if (data.success) { location.reload(); } else { showToast(data.message || 'Soru eklenemedi.', 'error'); }
+                } catch (err) {
+                    showToast('Sunucuya bağlanılamadı. İnternet bağlantını kontrol et.', 'error');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalBtnText;
+                }
             });
         }
 
@@ -113,13 +160,17 @@
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const questionId = form.querySelector('input[name=questionId]').value;
-                const res = await fetch('/api/delete-wrong-question', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: CURRENT_USER_ID, questionId })
-                });
-                const data = await res.json();
-                if (data.success) { location.reload(); } else { showToast(data.message || 'Soru silinemedi.', 'error'); }
+                try {
+                    const res = await fetch('/api/delete-wrong-question', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: CURRENT_USER_ID, questionId })
+                    });
+                    const data = await res.json().catch(() => ({ success: false, message: 'Sunucu yanıtı işlenemedi.' }));
+                    if (data.success) { location.reload(); } else { showToast(data.message || 'Soru silinemedi.', 'error'); }
+                } catch (err) {
+                    showToast('Sunucuya bağlanılamadı.', 'error');
+                }
             });
         });
     </script>

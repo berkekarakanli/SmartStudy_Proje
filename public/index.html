@@ -235,11 +235,40 @@
                 </button>
             </div>
 
-            <a href="/login" class="btn btn-outline-info orbitron me-lg-2" style="padding: 8px 25px; font-size: 0.8rem;">GİRİŞ YAP</a>
-            <a href="/register" class="btn btn-info orbitron text-dark" style="padding: 8px 25px; font-size: 0.8rem;">KAYIT OL</a>
+            <div id="navAuthGuest">
+                <a href="/login" class="btn btn-outline-info orbitron me-lg-2" style="padding: 8px 25px; font-size: 0.8rem;">GİRİŞ YAP</a>
+                <a href="/register" class="btn btn-info orbitron text-dark" style="padding: 8px 25px; font-size: 0.8rem;">KAYIT OL</a>
+            </div>
+            <div id="navAuthUser" class="dropdown d-none">
+                <button class="btn btn-outline-info orbitron dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="padding: 8px 20px; font-size: 0.8rem;">
+                    <i class="fas fa-user-circle me-1"></i><span id="navAuthName">Hesabım</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end" style="background:#0f172a; border:1px solid rgba(255,255,255,.1);">
+                    <li><a class="dropdown-item text-light" href="/dashboard"><i class="fas fa-table-columns me-2"></i>Panele Git</a></li>
+                    <li><a class="dropdown-item text-danger" href="/logout"><i class="fas fa-power-off me-2"></i>Çıkış Yap</a></li>
+                </ul>
+            </div>
         </div>
     </div>
 </nav>
+<script>
+    // Bu sayfa (index.html) hem Render'da hem Firebase Hosting'de statik
+    // olarak yayında - kendi başına oturum bilgisine erişemiyor. Sayfa
+    // yüklenince Render backend'ine sorup üst menüyü buna göre değiştiriyoruz.
+    (function () {
+        const API_BASE = 'https://smartstudy-proje.onrender.com';
+        fetch(API_BASE + '/api/me', { credentials: 'include' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.loggedIn) {
+                    document.getElementById('navAuthGuest').classList.add('d-none');
+                    document.getElementById('navAuthUser').classList.remove('d-none');
+                    document.getElementById('navAuthName').textContent = data.ad || 'Hesabım';
+                }
+            })
+            .catch(() => {}); // sessiz geç - varsayılan olarak Giriş Yap/Kayıt Ol görünür kalır
+})();
+</script>
 
 <!-- HERO -->
 <section class="hero">
