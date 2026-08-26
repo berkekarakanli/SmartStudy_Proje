@@ -10,8 +10,12 @@
     /* Sadece masaüstünde ekstra üst boşluk ekleniyor (topnav orada sabit/
        yüzer durumda). Mobilde topnav zaten gizli, bu yüzden sayfanın kendi
        padding/negatif-margin hesaplarına (ör. dashboard-student.html'deki
-       .appbar) hiç dokunmuyoruz. */
-    @media (min-width: 768px) { body { padding-top: 86px !important; } }
+       .appbar) hiç dokunmuyoruz.
+       NOT: "body[class]" da eklendi çünkü Bootstrap'ın .p-4 gibi spacing
+       utility sınıfları da !important kullanıyor VE sınıf seçici oldukları
+       için düz "body" öğe seçicisinden daha yüksek özgüllüğe (specificity)
+       sahipler; salt "body{...!important}" bu yüzden onları yenemiyordu. */
+    @media (min-width: 768px) { body, body[class] { padding-top: 86px !important; } }
 
     /* Sayfaların kendi eski "Panele Dön / Ana Sayfa" buton gruplarını
        (topnav zaten aynı işi gördüğü için) masaüstünde gizlemek için ortak
