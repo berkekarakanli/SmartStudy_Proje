@@ -42,6 +42,7 @@
     </style>
 </head>
 <body>
+    <%- include('partials/toast.html') %>
     <div class="topbar">
         <span class="title orbitron"><%= isStudent ? 'NET ANALİZİ & TERMİNAL' : 'EĞİTİM KOÇU TERMİNALİ' %></span>
         <a href="/dashboard" class="btn btn-sm btn-outline-light">Panele Dön</a>
@@ -272,7 +273,7 @@
             window.submitAnalysis = async function (isAI) {
                 const hedef = parseFloat(document.getElementById('hedefInput').value) || 0;
                 if (hedef > maxLimit) {
-                    alert('Hata: Hedef, maksimum sınır olan ' + maxLimit + ' neti aşamaz.');
+                    showToast('Hata: Hedef, maksimum sınır olan ' + maxLimit + ' neti aşamaz.', 'error');
                     return;
                 }
 
@@ -298,14 +299,14 @@
                     });
                     if (res.ok) {
                         if (isAI) aiUsedBefore = true;
-                        alert(isAI ? 'Yapay Zeka Analizi Tamamlandı!' : 'Net Analizi Başarıyla Kaydedildi!');
-                        window.location.href = '/dashboard';
+                        showToast(isAI ? 'Yapay Zeka Analizi Tamamlandı!' : 'Net Analizi Başarıyla Kaydedildi!', 'success');
+                        setTimeout(() => { window.location.href = '/dashboard'; }, 900);
                     } else {
                         const data = await res.json().catch(() => ({}));
-                        alert(data.message || 'Sunucu işlem hatası döndü!');
+                        showToast(data.message || 'Sunucu işlem hatası döndü!', 'error');
                     }
                 } catch (e) {
-                    alert('Sunucuya bağlanılamadı!');
+                    showToast('Sunucuya bağlanılamadı!', 'error');
                 } finally {
                     spinner.classList.add('d-none');
                 }
@@ -353,8 +354,8 @@
 
             window.assignHomework = async function () {
                 const studentId = document.getElementById('studentSelect').value;
-                if (!studentId) { alert('Öğrenci seçin.'); return; }
-                if (selectedTopics.length === 0) { alert('Konu seçin.'); return; }
+                if (!studentId) { showToast('Öğrenci seçin.', 'error'); return; }
+                if (selectedTopics.length === 0) { showToast('Konu seçin.', 'error'); return; }
 
                 const spinner = document.getElementById('assignSpinner');
                 spinner.classList.remove('d-none');
@@ -371,13 +372,13 @@
                         })
                     });
                     if (res.ok) {
-                        alert('Ödev Atandı!');
-                        window.location.href = '/dashboard';
+                        showToast('Ödev Atandı!', 'success');
+                        setTimeout(() => { window.location.href = '/dashboard'; }, 900);
                     } else {
-                        alert('Bağlantı hatası!');
+                        showToast('Bağlantı hatası!', 'error');
                     }
                 } catch (e) {
-                    alert('Bağlantı hatası!');
+                    showToast('Bağlantı hatası!', 'error');
                 } finally {
                     spinner.classList.add('d-none');
                 }

@@ -324,6 +324,38 @@
 
 <body>
 
+    <!-- Tarayıcının çirkin alert() kutusu yerine şık bildirim (toast) -->
+    <style>
+        #toastStack { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; flex-direction: column; gap: 10px; width: min(380px, calc(100% - 32px)); pointer-events: none; }
+        .toast { background: #0f172a; border: 1px solid rgba(255,255,255,0.1); border-left: 4px solid #0dcaf0; border-radius: 12px; padding: 14px 16px; display: flex; align-items: flex-start; gap: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); color: #f8fafc; font-family: 'Inter', Arial, sans-serif; font-size: 13px; opacity: 0; transform: translateY(-16px); transition: opacity 0.25s ease, transform 0.25s ease; pointer-events: auto; cursor: pointer; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { border-left-color: #22c55e; }
+        .toast.error { border-left-color: #ef4444; }
+        .toast.info { border-left-color: #0dcaf0; }
+        .toast i { margin-top: 1px; font-size: 15px; }
+        .toast.success i { color: #22c55e; }
+        .toast.error i { color: #ef4444; }
+        .toast.info i { color: #0dcaf0; }
+        .toast .msg { flex: 1; line-height: 1.4; }
+    </style>
+    <div id="toastStack"></div>
+    <script>
+        function showToast(message, type) {
+            type = type || 'info';
+            const icon = type === 'success' ? 'fa-circle-check' : (type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info');
+            const stack = document.getElementById('toastStack');
+            const el = document.createElement('div');
+            el.className = 'toast ' + type;
+            el.innerHTML = '<i class="fas ' + icon + '"></i><span class="msg"></span>';
+            el.querySelector('.msg').textContent = message;
+            stack.appendChild(el);
+            requestAnimationFrame(() => el.classList.add('show'));
+            function dismiss() { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }
+            el.addEventListener('click', dismiss);
+            setTimeout(dismiss, 4000);
+        }
+    </script>
+
     <div class="split-container">
         
         <!-- ========================================== -->
@@ -401,7 +433,7 @@
             const btn = document.getElementById(btnId);
 
             if (email.trim() === "" || pass.trim() === "") {
-                alert("Hata: Kimlik doğrulama alanları boş bırakılamaz.");
+                showToast("Hata: Kimlik doğrulama alanları boş bırakılamaz.", "error");
                 return;
             }
             
@@ -435,13 +467,13 @@
                     window.location.href = API_BASE + '/dashboard';
                 } else {
                     // Artık sunucudan gelen gerçek hatayı (Örn: Şifre hatalı) ekranda net göreceksin
-                    alert(data.message || "E-Posta veya Şifre Hatalı.");
+                    showToast(data.message || "E-Posta veya Şifre Hatalı.", "error");
                     btn.innerHTML = originalText;
                     btn.disabled = false;
                 }
             } catch (error) {
                 console.error("Giriş hatası:", error);
-                alert("Sunucuya bağlanılamadı. Lütfen terminalde node server.js komutunun çalıştığından emin olun.");
+                showToast("Sunucuya bağlanılamadı. Sunucu uyanıyor olabilir, birkaç saniye sonra tekrar dene.", "error");
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
