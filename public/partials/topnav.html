@@ -13,6 +13,17 @@
        .appbar) hiç dokunmuyoruz. */
     @media (min-width: 768px) { body { padding-top: 86px !important; } }
 
+    /* Sayfaların kendi eski "Panele Dön / Ana Sayfa" buton gruplarını
+       (topnav zaten aynı işi gördüğü için) masaüstünde gizlemek için ortak
+       sınıf. Mobilde (topnav gizliyken) bu butonlar görünmeye devam eder. */
+    @media (min-width: 768px) { .legacy-page-nav { display: none !important; } }
+
+    /* Sayfaların kendi "sticky" alt başlıkları (.panel-header-sticky,
+       .topbar) mobilde top:0'a yapışıyor (topnav orada zaten gizli).
+       Masaüstünde ise topnav sabit/yüzer durumda olduğu için bu başlıkların
+       da topnav'ın ALTINA yapışması gerekiyor, yoksa ikisi üst üste biner. */
+    @media (min-width: 768px) { .panel-header-sticky, .topbar { top: 86px !important; } }
+
     .topnav-wrap {
         position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
         width: min(980px, calc(100% - 32px));

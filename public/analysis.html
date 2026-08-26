@@ -45,9 +45,10 @@
 </head>
 <body>
     <%- include('partials/toast.html') %>
+    <%- include('partials/topnav.html', { user, activeTab: 'analiz' }) %>
     <div class="topbar">
         <span class="title orbitron"><%= isStudent ? 'NET ANALİZİ & TERMİNAL' : 'EĞİTİM KOÇU TERMİNALİ' %></span>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 legacy-page-nav">
             <a href="/" class="btn btn-sm btn-outline-secondary" title="Web Sitesine Dön"><i class="fas fa-house"></i></a>
             <a href="/dashboard" class="btn btn-sm btn-outline-light">Panele Dön</a>
         </div>

@@ -964,7 +964,7 @@ app.get('/premium-dersler', requireLogin, async (req, res) => {
         notes: notlar.filter(note => note.ders === video.key || note.video_id === video.id)
     }));
 
-    res.render('premium-dersler', { videos });
+    res.render('premium-dersler', { videos, user });
 });
 
 app.post('/save-note', requireLogin, async (req, res) => {

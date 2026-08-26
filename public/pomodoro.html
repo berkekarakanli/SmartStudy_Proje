@@ -17,9 +17,10 @@
     </style>
 </head>
 <body>
+    <%- include('partials/topnav.html', { user, activeTab: 'pomodoro' }) %>
     <main class="panel">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 legacy-page-nav">
                 <a href="/" class="btn btn-sm btn-outline-secondary" title="Web Sitesine Dön"><i class="fas fa-house"></i></a>
                 <a href="/dashboard" class="btn btn-sm btn-outline-info">Panele Dön</a>
             </div>
