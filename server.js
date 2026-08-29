@@ -25,7 +25,10 @@ app.set('trust proxy', 1);
 // 0. CORS VE GÜVENLİK AYARLARI (GÜNCELLENDİ)
 // ==========================================
 app.use(cors({
-    origin: ['https://smartstudy-9c6e1.web.app', 'http://localhost:3000', 'http://localhost:5000'],
+    // smartstudy-9c6e1.web.app = eski Firebase Hosting adresi (Cloudflare Pages
+    // taşıması tamamlanınca kaldırılacak). smartstudy-4gy.pages.dev = yeni
+    // Cloudflare Pages adresi.
+    origin: ['https://smartstudy-9c6e1.web.app', 'https://smartstudy-4gy.pages.dev', 'http://localhost:3000', 'http://localhost:5000'],
     credentials: true
 }));
 
