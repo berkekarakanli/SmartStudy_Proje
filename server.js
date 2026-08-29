@@ -1,4 +1,9 @@
 
+// .env dosyası SADECE yerelde var (git'e gitmiyor); Render'da bu değerler
+// zaten kendi ortam değişkenleri panelinden geliyor - orada .env dosyası
+// olmadığı için dotenv sessizce hiçbir şey yapmadan geçer, hataya sebep olmaz.
+require('dotenv').config({ quiet: true });
+
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
@@ -25,47 +30,12 @@ app.use(cors({
 }));
 
 // ==========================================
-// 1. FIREBASE BAŞLATMA VE MODÜLLER
+// 1. SUPABASE BAŞLATMA VE MODÜLLER
 // ==========================================
-const { initializeApp, cert, getApps } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
-
-// serviceAccountKey.json bilinçli olarak .gitignore'da (gizli anahtar Git'e
-// asla gitmemeli), bu yüzden Render gibi Git'ten deploy eden platformlarda bu
-// dosya AKIŞTA HİÇBİR ZAMAN bulunmaz. Eskiden burada doğrudan require()
-// yapılıyordu; bu, dosyanın olmadığı her ortamda (yani Render'da) sunucunun
-// açılışta çökmesine (MODULE_NOT_FOUND) ve dolayısıyla "API'ye bağlanılamıyor"
-// / "oturum süresi doldu" gibi tüm canlı hatalara yol açıyordu. Şimdi önce
-// FIREBASE_SERVICE_ACCOUNT ortam değişkenine (Render'da tanımlanacak, JSON
-// anahtarının tamamının string hali), yoksa yerel dosyaya bakılıyor.
-function loadServiceAccount() {
-    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        try {
-            return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-        } catch (e) {
-            console.error('[FIREBASE] FIREBASE_SERVICE_ACCOUNT ortam değişkeni geçerli bir JSON değil:', e.message);
-        }
-    }
-    try {
-        return require('./serviceAccountKey.json');
-    } catch (e) {
-        return null;
-    }
-}
-
-const serviceAccount = loadServiceAccount();
-if (!getApps().length) {
-    if (serviceAccount) {
-        initializeApp({ credential: cert(serviceAccount) });
-    } else {
-        console.error(
-            '[FIREBASE] Servis hesabı bulunamadı! Render\'da FIREBASE_SERVICE_ACCOUNT ortam ' +
-            'değişkenini (serviceAccountKey.json dosyasının TÜM içeriği, tek satır JSON olarak) ' +
-            'tanımlayın. Aksi halde Firestore\'a bağlanan hiçbir uç çalışmaz.'
-        );
-    }
-}
-const db = getFirestore();
+// Firebase Admin (Firestore + Auth) tamamen kaldırıldı - tüm veri ve kimlik
+// doğrulama artık Supabase'de. serviceAccountKey.json / FIREBASE_SERVICE_ACCOUNT
+// artık gerekmiyor.
+const { supabase, supabaseAuthClient } = require('./supabaseClient');
 
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'smartstudy-dev-secret-change-me';
@@ -94,28 +64,19 @@ const isProduction = process.env.NODE_ENV === 'production';
 // oturumların sıfırlanmasına yol açıyordu - tekrarlayan "giriş yaptım,
 // sayfa yenilendi, bir daha giriş yapmam gerekti" şikayetinin asıl kök
 // sebebi buydu (UptimeRobot sadece "uykuya dalmayı" önlüyor, bu farklı
-// bir sorun). Firestore'u zaten kullandığımız için, oturumları da orada
-// (ayrı bir "sessions" koleksiyonunde) saklayan basit bir Store yazdık -
-// böylece sunucu yeniden başlasa bile oturumlar hayatta kalıyor.
-// NOT: Bu her istekte Firestore'a küçük bir okuma/yazma ekliyor - ücretsiz
-// kotanın çok altında kalacak kadar küçük bir hobi projesi için önemsiz
-// bir maliyet, ama bilinçli bir trade-off olarak not düşülüyor.
-class FirestoreSessionStore extends session.Store {
-    constructor(firestoreDb) {
-        super();
-        this.db = firestoreDb;
-        this.collectionName = 'sessions';
-    }
+// bir sorun). Oturumlar artık Supabase'deki "sessions" tablosunda
+// saklanıyor - böylece sunucu yeniden başlasa bile oturumlar hayatta kalıyor.
+class SupabaseSessionStore extends session.Store {
     async get(sid, callback) {
         try {
-            const doc = await this.db.collection(this.collectionName).doc(sid).get();
-            if (!doc.exists) return callback(null, null);
-            const data = doc.data();
-            if (data.expires && data.expires < Date.now()) {
-                doc.ref.delete().catch(() => {});
+            const { data, error } = await supabase.from('sessions').select('session, expires').eq('sid', sid).maybeSingle();
+            if (error) return callback(error);
+            if (!data) return callback(null, null);
+            if (new Date(data.expires).getTime() < Date.now()) {
+                supabase.from('sessions').delete().eq('sid', sid).then(() => {});
                 return callback(null, null);
             }
-            callback(null, JSON.parse(data.session));
+            callback(null, data.session);
         } catch (e) {
             callback(e);
         }
@@ -123,19 +84,20 @@ class FirestoreSessionStore extends session.Store {
     async set(sid, sessionData, callback) {
         try {
             const maxAge = (sessionData.cookie && sessionData.cookie.maxAge) || (1000 * 60 * 60 * 24);
-            await this.db.collection(this.collectionName).doc(sid).set({
-                session: JSON.stringify(sessionData),
-                expires: Date.now() + maxAge
+            const { error } = await supabase.from('sessions').upsert({
+                sid,
+                session: sessionData,
+                expires: new Date(Date.now() + maxAge).toISOString()
             });
-            callback(null);
+            callback(error || null);
         } catch (e) {
             callback(e);
         }
     }
     async destroy(sid, callback) {
         try {
-            await this.db.collection(this.collectionName).doc(sid).delete();
-            callback(null);
+            const { error } = await supabase.from('sessions').delete().eq('sid', sid);
+            callback(error || null);
         } catch (e) {
             callback(e);
         }
@@ -146,7 +108,7 @@ class FirestoreSessionStore extends session.Store {
 }
 
 app.use(session({
-    store: new FirestoreSessionStore(db),
+    store: new SupabaseSessionStore(),
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
@@ -305,9 +267,9 @@ async function requireLogin(req, res, next) {
 
 async function currentUser(req) {
     if (!req.session.userId) return null;
-    const doc = await db.collection('users').doc(req.session.userId).get();
-    if (!doc.exists) return null;
-    return { id: doc.id, ...doc.data() };
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', req.session.userId).maybeSingle();
+    if (error || !data) return null;
+    return data;
 }
 
 // Flutter (mobil + web) istemcisi session çerezi taşımıyor; bunun yerine
@@ -322,9 +284,9 @@ async function resolveUser(req) {
     const explicitId = req.body?.userId || req.query?.userId;
     if (!explicitId) return null;
 
-    const doc = await db.collection('users').doc(String(explicitId)).get();
-    if (!doc.exists) return null;
-    return { id: doc.id, ...doc.data() };
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', String(explicitId)).maybeSingle();
+    if (error || !data) return null;
+    return data;
 }
 
 // /generate-plan, /assign-homework, /api/teacher-data gibi hem web (session)
@@ -366,15 +328,15 @@ app.get('/plan', requireLogin, async (req, res) => {
         let teacherData = null;
 
         if (!isStudent) {
-            const studentsSnap = await db.collection('users')
-                .where('role', '==', 'student')
-                .where('bagli_koc_kodu', '==', user.koc_kodu)
-                .get();
+            const { data: students } = await supabase.from('profiles')
+                .select('id, ad, email')
+                .eq('role', 'student')
+                .eq('bagli_koc_kodu', user.koc_kodu);
 
             teacherData = {
                 teacher_type: user.teacher_type || 'koc',
                 branch: user.branch || '',
-                students: studentsSnap.docs.map(doc => ({ id: doc.id, ad: doc.data().ad, email: doc.data().email }))
+                students: students || []
             };
         }
 
@@ -393,18 +355,16 @@ app.get('/api/teacher-data', requireUser, async (req, res) => {
             return res.status(403).json({ success: false, message: 'Yetkisiz erişim' });
         }
 
-        const studentsSnap = await db.collection('users')
-            .where('role', '==', 'student')
-            .where('bagli_koc_kodu', '==', user.koc_kodu)
-            .get();
-
-        const students = studentsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const { data: students } = await supabase.from('profiles')
+            .select('*')
+            .eq('role', 'student')
+            .eq('bagli_koc_kodu', user.koc_kodu);
 
         res.json({
             success: true,
             teacher_type: user.teacher_type || 'koc',
             branch: user.branch || '',
-            students: students
+            students: students || []
         });
     } catch (e) {
         res.status(500).json({ success: false, message: 'Sunucu hatası' });
@@ -432,10 +392,7 @@ app.post('/teacher-setup', requireLogin, async (req, res) => {
         const teacher_type = req.body.teacher_type === 'brans' ? 'brans' : 'koc';
         const branch = teacher_type === 'brans' ? String(req.body.branch || 'Türkçe / Türk Dili ve Edebiyatı') : null;
 
-        await db.collection('users').doc(user.id).update({
-            teacher_type,
-            branch
-        });
+        await supabase.from('profiles').update({ teacher_type, branch }).eq('id', user.id);
 
         res.redirect('/dashboard');
     } catch (e) {
@@ -484,12 +441,15 @@ app.post('/register', registerLimiter, async (req, res) => {
             return res.status(400).send(errorPage('Kayıt Hatası', 'Devam etmek için KVKK Aydınlatma Metni\'ni ve Üyelik Sözleşmesi\'ni onaylamalısınız.', '/register'));
         }
 
-        const usersRef = db.collection('users');
-        const snapshot = await usersRef.where('email', '==', email).get();
-        if (!snapshot.empty) {
-            const msg = 'Bu e-posta sistemde zaten kayıtlı.';
-            if (wantsJson(req)) return res.status(409).json({ success: false, message: msg });
-            return res.status(409).send(errorPage('Kayıt Hatası', msg, '/register'));
+        // Davet (referans) sistemi: her kullanıcının kendi kodu var, bu kodla
+        // gelen her yeni kayıt referral_count'u artırır; 10'a ulaşınca
+        // davet eden otomatik Premium olur. Kullanıcı oluşturulmadan önce
+        // referans kodunun geçerli olup olmadığına bakıyoruz.
+        const gelenRefKodu = String(req.body.ref || '').trim().toUpperCase();
+        let referrer = null;
+        if (gelenRefKodu) {
+            const { data } = await supabase.from('profiles').select('id, referral_count, level').eq('referral_code', gelenRefKodu).maybeSingle();
+            referrer = data || null;
         }
 
         let kocKodu = null;
@@ -497,51 +457,45 @@ app.post('/register', registerLimiter, async (req, res) => {
             kocKodu = 'KOC-' + Math.random().toString(36).substr(2, 5).toUpperCase();
         }
 
-        // Davet (referans) sistemi: her kullanıcının kendi kodu var, bu kodla
-        // gelen her yeni kayıt referral_count'u artırır; 10'a ulaşınca
-        // davet eden otomatik Premium olur.
-        const referralCode = 'SS-' + Math.random().toString(36).substr(2, 6).toUpperCase();
-        const gelenRefKodu = String(req.body.ref || '').trim().toUpperCase();
-        let referrerDoc = null;
-        if (gelenRefKodu) {
-            const refSnap = await usersRef.where('referral_code', '==', gelenRefKodu).limit(1).get();
-            if (!refSnap.empty) referrerDoc = refSnap.docs[0];
-        }
-
-        const newUserRef = await usersRef.add({
-            role,
-            ad,
+        // Kullanıcı Supabase Auth'ta oluşturuluyor (şifre orada güvenli şekilde
+        // saklanıyor, artık kendi pbkdf2 hashleme mantığımız YOK). "profiles"
+        // tablosundaki karşılık gelen satır, veritabanındaki bir tetikleyici
+        // (handle_new_user) tarafından OTOMATİK oluşturuluyor - biz sadece
+        // koc_kodu ve referred_by gibi ekstra alanları sonradan güncelliyoruz.
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
             email,
-            sifre: hashPassword(sifre),
-            level: 'Free',
-            koc_kodu: kocKodu,
-            teacher_type: null,
-            branch: null,
-            bagli_koc_kodlari: [],
-            bagli_koc_listesi: [],
-            bagli_koc_kodu: null,
-            bagli_koc_ad: null,
-            kayit_tarihi: new Date().toISOString(),
-            kvkk_onay: kvkkOnayVerildi,
-            sozlesme_onay: sozlesmeOnayVerildi,
-            onay_tarihi: (kvkkOnayVerildi || sozlesmeOnayVerildi) ? new Date().toISOString() : null,
-            referral_code: referralCode,
-            referral_count: 0,
-            referred_by: referrerDoc ? referrerDoc.id : null
+            password: sifre,
+            email_confirm: true,
+            user_metadata: { ad, role, kvkk_onay: kvkkOnayVerildi, sozlesme_onay: sozlesmeOnayVerildi }
         });
 
-        if (referrerDoc) {
-            const yeniSayi = Number(referrerDoc.data().referral_count || 0) + 1;
+        if (authError) {
+            const isDuplicate = authError.code === 'email_exists' || /already.*registered/i.test(authError.message || '');
+            const msg = isDuplicate ? 'Bu e-posta sistemde zaten kayıtlı.' : 'Kayıt işlemi sırasında hata oluştu.';
+            const status = isDuplicate ? 409 : 500;
+            if (!isDuplicate) console.error(authError);
+            if (wantsJson(req)) return res.status(status).json({ success: false, message: msg });
+            return res.status(status).send(errorPage('Kayıt Hatası', msg, '/register'));
+        }
+
+        const newUserId = authData.user.id;
+        await supabase.from('profiles').update({
+            koc_kodu: kocKodu,
+            referred_by: referrer ? referrer.id : null
+        }).eq('id', newUserId);
+
+        if (referrer) {
+            const yeniSayi = Number(referrer.referral_count || 0) + 1;
             const referrerUpdates = { referral_count: yeniSayi };
             // Her 10 davette bir Premium ödülü (zaten Premium'sa dokunmuyor).
-            if (yeniSayi % 10 === 0 && referrerDoc.data().level !== 'Premium') {
+            if (yeniSayi % 10 === 0 && referrer.level !== 'Premium') {
                 referrerUpdates.level = 'Premium';
             }
-            await referrerDoc.ref.update(referrerUpdates);
+            await supabase.from('profiles').update(referrerUpdates).eq('id', referrer.id);
         }
 
         if (wantsJson(req)) {
-            return res.json({ success: true, userId: newUserRef.id, id: newUserRef.id, role });
+            return res.json({ success: true, userId: newUserId, id: newUserId, role });
         }
         res.redirect('/login');
     } catch (error) {
@@ -556,34 +510,27 @@ app.post('/login', loginLimiter, async (req, res) => {
     try {
         const email = String(req.body.email || '').trim().toLowerCase();
         const sifre = String(req.body.sifre || '');
-        const requestedRole = req.body.requestedRole; 
-        
-        const snapshot = await db.collection('users').where('email', '==', email).get();
-        if (snapshot.empty) {
+        const requestedRole = req.body.requestedRole;
+
+        // Şifre doğrulaması artık Supabase Auth'ta yapılıyor - kendi
+        // pbkdf2/hashPassword mantığımıza hiç gerek kalmadı.
+        const { data: signInData, error: signInError } = await supabaseAuthClient.auth.signInWithPassword({ email, password: sifre });
+        if (signInError || !signInData.user) {
             return res.status(401).json({ success: false, message: 'E-Posta veya şifre hatalı.' });
         }
 
-        const userDoc = snapshot.docs[0];
-        const user = { id: userDoc.id, ...userDoc.data() };
-
-        if (!verifyPassword(sifre, user.sifre)) {
-            return res.status(401).json({ success: false, message: 'E-Posta veya şifre hatalı.' });
+        const { data: user, error: profileError } = await supabase.from('profiles').select('*').eq('id', signInData.user.id).maybeSingle();
+        if (profileError || !user) {
+            return res.status(500).json({ success: false, message: 'Profil bulunamadı.' });
         }
+
         if (requestedRole && user.role !== requestedRole) {
             return res.status(403).json({ success: false, message: `Bu hesaba ${requestedRole === 'teacher' ? 'Eğitmen' : 'Öğrenci'} olarak giriş yapılamaz.` });
         }
 
-        if (!String(user.sifre).startsWith('pbkdf2$')) {
-            await db.collection('users').doc(user.id).update({ sifre: hashPassword(sifre) });
-        }
-
         syncSessionUser(req, user);
         // "Beni hatırla" işaretliyse oturum çerezi 30 gün, değilse varsayılan
-        // 24 saat sürüyor. NOT: Bu sadece tarayıcıdaki çerezin ömrünü uzatır;
-        // sunucu bellek-içi (in-memory) oturum deposu her sunucu yeniden
-        // başlatmasında (deploy veya Render'ın kendi periyodik yeniden
-        // başlatmaları) sıfırlanır - bu, "giriş sıfırlanıyor" şikayetinin
-        // ayrı ve daha köklü bir sebebi.
+        // 24 saat sürüyor.
         if (req.body.rememberMe) {
             req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
         }
@@ -603,15 +550,13 @@ app.post('/set-coach', requireLogin, async (req, res) => {
         if (user.role !== 'student') return res.redirect('/dashboard');
 
         const girilenKod = String(req.body.coachCode || '').trim().toUpperCase();
-        const snapshot = await db.collection('users').where('role', '==', 'teacher').where('koc_kodu', '==', girilenKod).get();
-        
-        if (snapshot.empty) {
+        const { data: teacher } = await supabase.from('profiles').select('*').eq('role', 'teacher').eq('koc_kodu', girilenKod).maybeSingle();
+
+        if (!teacher) {
             return res.status(404).send(errorPage('Kod Hatası', 'Geçersiz koç kodu girdiniz.', '/dashboard'));
         }
 
-        const teacher = snapshot.docs[0].data();
-        const studentDocRef = db.collection('users').doc(user.id);
-        const studentData = (await studentDocRef.get()).data();
+        const { data: studentData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
 
         let kocKodlari = studentData.bagli_koc_kodlari || [];
         let kocListesi = studentData.bagli_koc_listesi || [];
@@ -626,12 +571,12 @@ app.post('/set-coach', requireLogin, async (req, res) => {
             kocListesi.push({ kod: girilenKod, ad: teacher.ad });
         }
 
-        await studentDocRef.update({ 
+        await supabase.from('profiles').update({
             bagli_koc_kodlari: kocKodlari,
             bagli_koc_listesi: kocListesi,
-            bagli_koc_kodu: girilenKod, 
-            bagli_koc_ad: teacher.ad 
-        });
+            bagli_koc_kodu: girilenKod,
+            bagli_koc_ad: teacher.ad
+        }).eq('id', user.id);
 
         res.redirect('/dashboard');
     } catch (error) {
@@ -646,8 +591,7 @@ app.post('/remove-coach', requireLogin, async (req, res) => {
         if (user.role !== 'student') return res.redirect('/dashboard');
 
         const coachCodeToRemove = String(req.body.coachCode || '').trim().toUpperCase();
-        const studentDocRef = db.collection('users').doc(user.id);
-        const studentData = (await studentDocRef.get()).data();
+        const { data: studentData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
 
         let kocKodlari = studentData.bagli_koc_kodlari || [];
         let kocListesi = studentData.bagli_koc_listesi || [];
@@ -668,7 +612,7 @@ app.post('/remove-coach', requireLogin, async (req, res) => {
             updateData.bagli_koc_ad = null;
         }
 
-        await studentDocRef.update(updateData);
+        await supabase.from('profiles').update(updateData).eq('id', user.id);
         res.redirect('/dashboard');
     } catch (error) {
         console.error(error);
@@ -774,50 +718,47 @@ app.get('/dashboard', requireLogin, async (req, res) => {
         }
 
         if (user.role === 'teacher') {
-            const snap1 = await db.collection('users')
-                .where('role', '==', 'student')
-                .where('bagli_koc_kodlari', 'array-contains', user.koc_kodu)
-                .get();
+            const { data: snap1 } = await supabase.from('profiles')
+                .select('*')
+                .eq('role', 'student')
+                .contains('bagli_koc_kodlari', [user.koc_kodu]);
 
-            const snap2 = await db.collection('users')
-                .where('role', '==', 'student')
-                .where('bagli_koc_kodu', '==', user.koc_kodu)
-                .get();
+            const { data: snap2 } = await supabase.from('profiles')
+                .select('*')
+                .eq('role', 'student')
+                .eq('bagli_koc_kodu', user.koc_kodu);
 
             const studentMap = new Map();
-            snap1.docs.forEach(doc => studentMap.set(doc.id, { id: doc.id, ...doc.data() }));
-            snap2.docs.forEach(doc => studentMap.set(doc.id, { id: doc.id, ...doc.data() }));
+            (snap1 || []).forEach(s => studentMap.set(s.id, s));
+            (snap2 || []).forEach(s => studentMap.set(s.id, s));
 
             const myStudents = [];
             for (const [sId, sData] of studentMap.entries()) {
-                const anaSnap = await db.collection('analizler').where('user_id', '==', sId).get();
-                const analizler = anaSnap.docs.map(d => d.data()).sort((a,b) => new Date(b.tarih) - new Date(a.tarih));
+                const { data: analizlerRaw } = await supabase.from('analizler').select('*').eq('user_id', sId);
+                const analizler = (analizlerRaw || []).sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
                 const sonNet = analizler.length > 0 ? Number(analizler[0].toplam_net).toFixed(2) : '0.00';
-                
-                myStudents.push({ 
-                    id: sId, 
-                    ad: sData.ad, 
-                    email: sData.email, 
-                    analizSayisi: analizler.length, 
-                    sonNet: sonNet 
+
+                myStudents.push({
+                    id: sId,
+                    ad: sData.ad,
+                    email: sData.email,
+                    analizSayisi: analizler.length,
+                    sonNet: sonNet
                 });
             }
 
-            const hwSnapshot = await db.collection('homeworks').where('teacher_id', '==', user.id).get();
-            const myAssignedHomeworks = hwSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const { data: myAssignedHomeworks } = await supabase.from('homeworks').select('*').eq('teacher_id', user.id);
 
             const roleBadgeText = user.teacher_type === 'brans' ? `Branş Öğretmeni (${user.branch})` : 'Eğitim Koçu (Genel)';
             const hasNoStudents = myStudents.length === 0;
 
-            res.render('dashboard-teacher', { user, roleBadgeText, myStudents, myAssignedHomeworks, hasNoStudents });
+            res.render('dashboard-teacher', { user, roleBadgeText, myStudents, myAssignedHomeworks: myAssignedHomeworks || [], hasNoStudents });
         } else {
             // Flutter'daki HomeTabContent ile birebir aynı mantık: tüm
             // analizler eskiden-yeniye tek bir listede, sınav türüne göre
             // sekmelere ayrılmadan gösteriliyor.
-            const analizSnapshot = await db.collection('analizler').where('user_id', '==', user.id).get();
-            const analizler = analizSnapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
+            const { data: analizlerRaw } = await supabase.from('analizler').select('*').eq('user_id', user.id);
+            const analizler = (analizlerRaw || []).sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
 
             // NOT: "Son Net" ve "Gelişim İndeksi" artık TÜM sınav türlerini
             // karıştırarak tek bir global değer olarak gösterilmiyor - her
@@ -883,11 +824,10 @@ app.get('/profile', requireLogin, async (req, res) => {
     const user = await currentUser(req);
     if (!user) return res.redirect('/login');
 
-    const [analizSnap, wrongSnap] = await Promise.all([
-        db.collection('analizler').where('user_id', '==', user.id).get(),
-        db.collection('wrong_questions').where('user_id', '==', user.id).get()
+    const [{ data: analizler }, { data: wrongQuestions }] = await Promise.all([
+        supabase.from('analizler').select('*').eq('user_id', user.id),
+        supabase.from('wrong_questions').select('*').eq('user_id', user.id)
     ]);
-    const analizler = analizSnap.docs.map(d => d.data());
 
     const pomodoroDakika = Number(user.pomodoro_dakika || 0);
     const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
@@ -897,14 +837,14 @@ app.get('/profile', requireLogin, async (req, res) => {
     let referralCode = user.referral_code;
     if (!referralCode) {
         referralCode = 'SS-' + Math.random().toString(36).substr(2, 6).toUpperCase();
-        await db.collection('users').doc(user.id).update({ referral_code: referralCode });
+        await supabase.from('profiles').update({ referral_code: referralCode }).eq('id', user.id);
     }
     const referralCount = Number(user.referral_count || 0);
     const referralRemaining = 10 - (referralCount % 10);
 
     const badges = computeBadges({
-        analizler,
-        wrongCount: wrongSnap.size,
+        analizler: analizler || [],
+        wrongCount: (wrongQuestions || []).length,
         pomodoroDakika,
         referralCount,
         kocSayisi: kocListesi.length,
@@ -913,8 +853,8 @@ app.get('/profile', requireLogin, async (req, res) => {
 
     res.render('profile', {
         user,
-        analizCount: analizSnap.size,
-        wrongCount: wrongSnap.size,
+        analizCount: (analizler || []).length,
+        wrongCount: (wrongQuestions || []).length,
         pomodoroDakika,
         kocListesi,
         referralCode,
@@ -944,17 +884,25 @@ app.post('/profile', requireLogin, async (req, res) => {
             return res.status(400).send(errorPage('Profil Hatası', 'Girdiğiniz bilgileri kontrol edin.', '/profile'));
         }
 
-        const snapshot = await db.collection('users').where('email', '==', email).get();
-        if (!snapshot.empty && snapshot.docs[0].id !== user.id) {
+        const { data: existing } = await supabase.from('profiles').select('id').eq('email', email).maybeSingle();
+        if (existing && existing.id !== user.id) {
             return res.status(409).send(errorPage('Profil Hatası', 'Bu email başka bir hesapta kullanılıyor.', '/profile'));
         }
 
-        const updates = { ad, email };
-        if (newPassword && newPassword.length >= 6) {
-            updates.sifre = hashPassword(newPassword);
+        // E-posta ve şifre artık Supabase Auth tarafında yönetiliyor (bu
+        // ikisi "profiles" tablosunda değil, "auth.users"da tutuluyor).
+        const authUpdates = {};
+        if (email !== user.email) authUpdates.email = email;
+        if (newPassword && newPassword.length >= 6) authUpdates.password = newPassword;
+        if (Object.keys(authUpdates).length > 0) {
+            const { error: authUpdateError } = await supabase.auth.admin.updateUserById(user.id, authUpdates);
+            if (authUpdateError) {
+                console.error(authUpdateError);
+                return res.status(500).send(errorPage('Hata', 'E-posta/şifre güncellenemedi.', '/profile'));
+            }
         }
 
-        await db.collection('users').doc(user.id).update(updates);
+        await supabase.from('profiles').update({ ad, email }).eq('id', user.id);
         res.redirect('/dashboard');
     } catch (error) {
         console.error(error);
@@ -968,10 +916,10 @@ app.post('/profile', requireLogin, async (req, res) => {
 app.post('/api/update-notifications', requireUser, async (req, res) => {
     try {
         const user = req.currentUser;
-        await db.collection('users').doc(user.id).update({
+        await supabase.from('profiles').update({
             email_notifications: !!req.body.email_notifications,
             study_reminders: !!req.body.study_reminders
-        });
+        }).eq('id', user.id);
         res.json({ success: true });
     } catch (error) {
         console.error(error);
@@ -986,19 +934,20 @@ app.post('/api/delete-account', requireUser, async (req, res) => {
     try {
         const user = req.currentUser;
         const sifre = String(req.body.password || '');
-        if (!verifyPassword(sifre, user.sifre)) {
+        // Şifre doğrulaması artık Supabase Auth üzerinden yapılıyor.
+        const { error: verifyError } = await supabaseAuthClient.auth.signInWithPassword({ email: user.email, password: sifre });
+        if (verifyError) {
             return res.status(401).json({ success: false, message: 'Şifre hatalı.' });
         }
 
-        const [analizSnap, wrongSnap] = await Promise.all([
-            db.collection('analizler').where('user_id', '==', user.id).get(),
-            db.collection('wrong_questions').where('user_id', '==', user.id).get()
-        ]);
-        const batch = db.batch();
-        analizSnap.docs.forEach(d => batch.delete(d.ref));
-        wrongSnap.docs.forEach(d => batch.delete(d.ref));
-        batch.delete(db.collection('users').doc(user.id));
-        await batch.commit();
+        // auth.users satırını silmek yeterli: profiles (ON DELETE CASCADE ile
+        // auth.users'a bağlı) ve ona bağlı analizler/wrong_questions da
+        // otomatik olarak zincirleme silinir - ayrıca tek tek silmeye gerek yok.
+        const { error: deleteError } = await supabase.auth.admin.deleteUser(user.id);
+        if (deleteError) {
+            console.error(deleteError);
+            return res.status(500).json({ success: false, message: 'Hesap silinemedi.' });
+        }
 
         req.session.destroy(() => res.json({ success: true }));
     } catch (error) {
@@ -1017,9 +966,8 @@ app.get('/wrong-questions', requireLogin, async (req, res) => {
         const user = await currentUser(req);
         if (!user) return res.redirect('/login');
 
-        const snap = await db.collection('wrong_questions').where('user_id', '==', user.id).get();
-        const questions = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
+        const { data: questionsRaw } = await supabase.from('wrong_questions').select('*').eq('user_id', user.id);
+        const questions = (questionsRaw || []).sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
 
         const limitReached = user.level !== 'Premium' && questions.length >= 5;
 
@@ -1040,11 +988,10 @@ app.get('/student-coach', requireLogin, async (req, res) => {
         if (!user) return res.redirect('/login');
         if (user.role !== 'student') return res.redirect('/dashboard');
 
-        const hwSnap = await db.collection('homeworks').where('student_id', '==', user.id).get();
-        const homeworks = hwSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const { data: homeworks } = await supabase.from('homeworks').select('*').eq('student_id', user.id);
         const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ kod: user.bagli_koc_kodu, ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
 
-        res.render('student-coach', { user, homeworks, kocListesi });
+        res.render('student-coach', { user, homeworks: homeworks || [], kocListesi });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Koç bilgisi yüklenirken sorun oluştu.', '/dashboard'));
@@ -1061,8 +1008,8 @@ app.get('/leaderboard', requireLogin, async (req, res) => {
         const user = await currentUser(req);
         if (!user) return res.redirect('/login');
 
-        const snap = await db.collection('users').where('role', '==', 'student').get();
-        const fullList = snap.docs.map(d => d.data())
+        const { data: allStudents } = await supabase.from('profiles').select('*').eq('role', 'student');
+        const fullList = (allStudents || [])
             .filter(u => Number(u.en_yuksek_net || 0) > 0)
             .sort((a, b) => Number(b.en_yuksek_net) - Number(a.en_yuksek_net));
 
@@ -1099,7 +1046,7 @@ app.get('/payment', requireLogin, async (req, res) => {
 });
 
 app.post('/payment-success', requireLogin, async (req, res) => {
-    await db.collection('users').doc(req.session.userId).update({ level: 'Premium' });
+    await supabase.from('profiles').update({ level: 'Premium' }).eq('id', req.session.userId);
     req.session.userLevel = 'Premium';
     res.redirect('/dashboard');
 });
@@ -1119,12 +1066,12 @@ app.post('/add-video', requireLogin, async (req, res) => {
         const { ders, title, teacher, videoId } = req.body;
         if (!ders || !title || !videoId) return res.status(400).send('Eksik bilgi');
 
-        await db.collection('video_dersler').add({
+        await supabase.from('video_dersler').insert({
             teacher_id: user.id,
             ders,
             title,
             teacher: teacher || user.ad,
-            videoId: videoId.trim(),
+            video_id: videoId.trim(),
             tarih: new Date().toISOString()
         });
 
@@ -1140,8 +1087,7 @@ app.get('/premium-dersler', requireLogin, async (req, res) => {
         return res.status(403).send(errorPage('Premium Gerekli', 'Bu laboratuvar sadece Premium üyeler içindir.', '/payment'));
     }
 
-    const notlarSnap = await db.collection('video_notlari').where('user_id', '==', user.id).get();
-    const notlar = notlarSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const { data: notlar } = await supabase.from('video_notlari').select('*').eq('user_id', user.id);
 
     // NOT: Buradaki "SML Hoca / TYT Matematik Genel Tekrar" varsayılan videosu
     // kaldırıldı (talep üzerine).
@@ -1152,12 +1098,14 @@ app.get('/premium-dersler', requireLogin, async (req, res) => {
         { id: 'def_5', key: 'biyoloji', ders: 'Biyoloji', title: 'TYT Biyoloji Genel Tekrar', teacher: 'Biosem', videoId: 'IOKAsbdHiMc' }
     ];
 
-    const customVidSnap = await db.collection('video_dersler').get();
-    const customVideos = customVidSnap.docs.map(d => ({ id: d.id, key: d.data().ders, ...d.data() }));
+    const { data: customVidRaw } = await supabase.from('video_dersler').select('*');
+    // Şablon (premium-dersler.html) videoId'yi camelCase bekliyor - Postgres
+    // sütunu video_id (snake_case) olduğu için burada eşliyoruz.
+    const customVideos = (customVidRaw || []).map(v => ({ ...v, key: v.ders, videoId: v.video_id }));
 
     const videos = [...defaultVideos, ...customVideos].map(video => ({
         ...video,
-        notes: notlar.filter(note => note.ders === video.key || note.video_id === video.id)
+        notes: (notlar || []).filter(note => note.ders === video.key || note.video_id === video.id)
     }));
 
     res.render('premium-dersler', { videos, user });
@@ -1165,29 +1113,28 @@ app.get('/premium-dersler', requireLogin, async (req, res) => {
 
 app.post('/save-note', requireLogin, async (req, res) => {
     const { ders, videoId, videoTitle, notBaslik, notMetni } = req.body;
-    await db.collection('video_notlari').add({ 
-        user_id: req.session.userId, 
-        ders, 
+    await supabase.from('video_notlari').insert({
+        user_id: req.session.userId,
+        ders,
         video_id: videoId,
-        video_baslik: videoTitle, 
-        not_baslik: notBaslik || videoTitle, 
-        not_metni: notMetni, 
-        tarih: new Date().toISOString() 
+        video_baslik: videoTitle,
+        not_baslik: notBaslik || videoTitle,
+        not_metni: notMetni,
+        tarih: new Date().toISOString()
     });
     res.redirect('/premium-dersler');
 });
 
 app.post('/update-note', requireLogin, async (req, res) => {
-    await db.collection('video_notlari').doc(req.body.noteId).update({ 
-        not_baslik: req.body.notBaslik, 
-        not_metni: req.body.notMetni, 
-        guncelleme_tarihi: new Date().toISOString() 
-    });
+    await supabase.from('video_notlari').update({
+        not_baslik: req.body.notBaslik,
+        not_metni: req.body.notMetni
+    }).eq('id', req.body.noteId);
     res.redirect('/premium-dersler');
 });
 
 app.post('/delete-note', requireLogin, async (req, res) => {
-    await db.collection('video_notlari').doc(req.body.noteId).delete();
+    await supabase.from('video_notlari').delete().eq('id', req.body.noteId);
     res.redirect('/premium-dersler');
 });
 
@@ -1200,14 +1147,13 @@ async function deleteAnalizHandler(req, res) {
             return res.status(400).send(errorPage('Hata', 'analizId gerekli.', '/dashboard'));
         }
 
-        const ref = db.collection('analizler').doc(analizId);
-        const doc = await ref.get();
-        if (!doc.exists || doc.data().user_id !== user.id) {
+        const { data: analiz } = await supabase.from('analizler').select('user_id').eq('id', analizId).maybeSingle();
+        if (!analiz || analiz.user_id !== user.id) {
             if (wantsJson(req)) return res.status(404).json({ success: false, message: 'Analiz bulunamadı.' });
             return res.status(404).send(errorPage('Hata', 'Analiz bulunamadı.', '/dashboard'));
         }
 
-        await ref.delete();
+        await supabase.from('analizler').delete().eq('id', analizId);
         if (wantsJson(req)) return res.json({ success: true });
         res.redirect('/dashboard');
     } catch (error) {
@@ -1236,7 +1182,7 @@ app.post('/generate-plan', requireUser, async (req, res) => {
             }
         }
 
-        const docRef = await db.collection('analizler').add({
+        const { data: newAnaliz, error: analizError } = await supabase.from('analizler').insert({
             user_id: user.id,
             sinav_turu: sinav_turu,
             hedef_net: hedef_net,
@@ -1247,9 +1193,10 @@ app.post('/generate-plan', requireUser, async (req, res) => {
             fen: detaylar.fen || 0,
             sosyal: detaylar.sosyal || 0,
             tarih: new Date().toISOString()
-        });
+        }).select('id').single();
+        if (analizError) throw analizError;
 
-        if (wantsJson(req)) return res.status(201).json({ success: true, id: docRef.id, toplam_net: toplamNet });
+        if (wantsJson(req)) return res.status(201).json({ success: true, id: newAnaliz.id, toplam_net: toplamNet });
         res.redirect('/dashboard');
     } catch (error) {
         console.error(error);
@@ -1283,7 +1230,7 @@ app.post('/assign-homework', requireUser, async (req, res) => {
         let question_count = parseInt(req.body.question_count, 10);
         if (!Number.isFinite(question_count) || question_count < 1) question_count = null;
 
-        const hwRef = await db.collection('homeworks').add({
+        const { data: newHw, error: hwError } = await supabase.from('homeworks').insert({
             teacher_id: user.id,
             student_id: student_id,
             exam_type,
@@ -1293,9 +1240,10 @@ app.post('/assign-homework', requireUser, async (req, res) => {
             date_assigned: new Date().toISOString(),
             status: 'pending',
             completed: false
-        });
+        }).select('id').single();
+        if (hwError) throw hwError;
 
-        if (wantsJson(req)) return res.status(201).json({ success: true, id: hwRef.id });
+        if (wantsJson(req)) return res.status(201).json({ success: true, id: newHw.id });
         res.redirect('/dashboard');
     } catch (error) {
         console.error(error);
@@ -1316,13 +1264,12 @@ app.get('/api/analizler', async (req, res) => {
         const user = await resolveUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
 
-        const snap = await db.collection('analizler').where('user_id', '==', user.id).get();
+        const { data: analizlerRaw } = await supabase.from('analizler').select('*').eq('user_id', user.id);
         // NOT: Eskiden-yeniye (artan) sırayla dönüyor çünkü Flutter tarafı
         // (dashboard_screen.dart) _analizler.first'ü "ilk net", .last'ı
         // "son net" olarak kullanıyor - listenin sonunda en güncel kayıt
         // olmasını bekliyor.
-        const analizler = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
+        const analizler = (analizlerRaw || []).sort((a, b) => new Date(a.tarih) - new Date(b.tarih));
 
         res.json({ success: true, analizler, userLevel: user.level || 'Free' });
     } catch (e) {
@@ -1337,9 +1284,8 @@ app.get('/api/wrong-questions', async (req, res) => {
         const user = await resolveUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
 
-        const snap = await db.collection('wrong_questions').where('user_id', '==', user.id).get();
-        const questions = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
+        const { data: questionsRaw } = await supabase.from('wrong_questions').select('*').eq('user_id', user.id);
+        const questions = (questionsRaw || []).sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
 
         res.json({ success: true, questions, userLevel: user.level || 'Free' });
     } catch (e) {
@@ -1354,29 +1300,30 @@ app.post('/api/wrong-questions/add', async (req, res) => {
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
 
         if (user.level !== 'Premium') {
-            const existing = await db.collection('wrong_questions').where('user_id', '==', user.id).get();
-            if (existing.size >= 5) {
+            const { count } = await supabase.from('wrong_questions').select('id', { count: 'exact', head: true }).eq('user_id', user.id);
+            if ((count || 0) >= 5) {
                 return res.status(403).json({ success: false, message: 'Free üyelikte hata defterine en fazla 5 soru eklenebilir. Premium\'a geçerek sınırsız ekleyebilirsin.' });
             }
         }
 
         const { question_text, ai_solution, image_base64 } = req.body;
-        // Firestore doküman başına en fazla 1 MiB veri kabul ediyor. İstemci
-        // fotoğrafı zaten küçültüp sıkıştırıyor ama yine de bir güvenlik
-        // ağı olarak burada da kontrol ediyoruz - aksi halde kullanıcı genel
-        // bir 500 hatası görür, sebebini anlayamaz.
-        if (image_base64 && image_base64.length > 900000) {
+        // İstemci fotoğrafı zaten küçültüp sıkıştırıyor ama yine de bir
+        // güvenlik ağı olarak burada da makul bir üst sınır kontrol
+        // ediyoruz - aksi halde kullanıcı genel bir 500 hatası görür,
+        // sebebini anlayamaz.
+        if (image_base64 && image_base64.length > 5000000) {
             return res.status(413).json({ success: false, message: 'Fotoğraf çok büyük. Daha küçük bir fotoğraf dene.' });
         }
-        const docRef = await db.collection('wrong_questions').add({
+        const { data: newQuestion, error: qError } = await supabase.from('wrong_questions').insert({
             user_id: user.id,
             question_text: question_text || 'Hatalı Soru Kaydı',
             ai_solution: ai_solution || '',
             image_base64: image_base64 || '',
             tarih: new Date().toISOString()
-        });
+        }).select('id').single();
+        if (qError) throw qError;
 
-        res.json({ success: true, id: docRef.id });
+        res.json({ success: true, id: newQuestion.id });
     } catch (e) {
         console.error(e);
         res.status(500).json({ success: false, message: 'Soru eklenemedi.' });
@@ -1391,13 +1338,12 @@ app.post('/api/delete-wrong-question', async (req, res) => {
         const { questionId } = req.body;
         if (!questionId) return res.status(400).json({ success: false, message: 'questionId gerekli.' });
 
-        const ref = db.collection('wrong_questions').doc(questionId);
-        const doc = await ref.get();
-        if (!doc.exists || doc.data().user_id !== user.id) {
+        const { data: question } = await supabase.from('wrong_questions').select('user_id').eq('id', questionId).maybeSingle();
+        if (!question || question.user_id !== user.id) {
             return res.status(404).json({ success: false, message: 'Soru bulunamadı.' });
         }
 
-        await ref.delete();
+        await supabase.from('wrong_questions').delete().eq('id', questionId);
         res.json({ success: true });
     } catch (e) {
         console.error(e);
@@ -1413,28 +1359,20 @@ app.get('/api/student-coach', async (req, res) => {
 
         let coach = {};
         if (user.bagli_koc_kodu) {
-            const coachSnap = await db.collection('users')
-                .where('role', '==', 'teacher')
-                .where('koc_kodu', '==', user.bagli_koc_kodu)
-                .limit(1)
-                .get();
-            if (!coachSnap.empty) {
-                const c = coachSnap.docs[0].data();
+            const { data: c } = await supabase.from('profiles').select('ad, email').eq('role', 'teacher').eq('koc_kodu', user.bagli_koc_kodu).maybeSingle();
+            if (c) {
                 coach = { ad: c.ad, email: c.email, kod: user.bagli_koc_kodu };
             }
         }
 
-        const hwSnap = await db.collection('homeworks').where('student_id', '==', user.id).get();
-        const homeworks = hwSnap.docs.map(d => {
-            const hw = d.data();
-            return {
-                id: d.id,
-                subject: hw.subject,
-                topic: Array.isArray(hw.topics) ? hw.topics.join(', ') : (hw.topics || ''),
-                exam_type: hw.exam_type,
-                completed: hw.completed === true || hw.status === 'completed'
-            };
-        }).sort((a, b) => new Date(b.date_assigned || 0) - new Date(a.date_assigned || 0));
+        const { data: hwRaw } = await supabase.from('homeworks').select('*').eq('student_id', user.id);
+        const homeworks = (hwRaw || []).map(hw => ({
+            id: hw.id,
+            subject: hw.subject,
+            topic: Array.isArray(hw.topics) ? hw.topics.join(', ') : (hw.topics || ''),
+            exam_type: hw.exam_type,
+            completed: hw.completed === true || hw.status === 'completed'
+        })).sort((a, b) => new Date(b.date_assigned || 0) - new Date(a.date_assigned || 0));
 
         res.json({ success: true, coach, homeworks });
     } catch (e) {
@@ -1452,13 +1390,10 @@ app.post('/api/connect-coach', async (req, res) => {
         const girilenKod = String(req.body.coachCode || '').trim().toUpperCase();
         if (!girilenKod) return res.status(400).json({ success: false, message: 'Koç kodu gerekli.' });
 
-        const snapshot = await db.collection('users').where('role', '==', 'teacher').where('koc_kodu', '==', girilenKod).get();
-        if (snapshot.empty) {
+        const { data: teacher } = await supabase.from('profiles').select('*').eq('role', 'teacher').eq('koc_kodu', girilenKod).maybeSingle();
+        if (!teacher) {
             return res.status(404).json({ success: false, message: 'Geçersiz koç kodu.' });
         }
-
-        const teacher = snapshot.docs[0].data();
-        const studentDocRef = db.collection('users').doc(user.id);
 
         let kocKodlari = user.bagli_koc_kodlari || [];
         let kocListesi = user.bagli_koc_listesi || [];
@@ -1473,12 +1408,12 @@ app.post('/api/connect-coach', async (req, res) => {
             kocListesi.push({ kod: girilenKod, ad: teacher.ad });
         }
 
-        await studentDocRef.update({
+        await supabase.from('profiles').update({
             bagli_koc_kodlari: kocKodlari,
             bagli_koc_listesi: kocListesi,
             bagli_koc_kodu: girilenKod,
             bagli_koc_ad: teacher.ad
-        });
+        }).eq('id', user.id);
 
         res.json({ success: true });
     } catch (e) {
@@ -1497,20 +1432,18 @@ app.post('/api/update-homework', async (req, res) => {
         const { homeworkId, completed } = req.body;
         if (!homeworkId) return res.status(400).json({ success: false, message: 'homeworkId gerekli.' });
 
-        const ref = db.collection('homeworks').doc(homeworkId);
-        const doc = await ref.get();
-        if (!doc.exists) {
+        const { data: hw } = await supabase.from('homeworks').select('student_id, teacher_id').eq('id', homeworkId).maybeSingle();
+        if (!hw) {
             return res.status(404).json({ success: false, message: 'Ödev bulunamadı.' });
         }
-        const hw = doc.data();
         if (hw.student_id !== user.id && hw.teacher_id !== user.id) {
             return res.status(403).json({ success: false, message: 'Bu ödevi güncelleme yetkiniz yok.' });
         }
 
-        await ref.update({
+        await supabase.from('homeworks').update({
             completed: !!completed,
             status: completed ? 'completed' : 'pending'
-        });
+        }).eq('id', homeworkId);
 
         res.json({ success: true });
     } catch (e) {
@@ -1525,9 +1458,8 @@ app.get('/api/leaderboard', async (req, res) => {
         const user = await resolveUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
 
-        const snap = await db.collection('users').where('role', '==', 'student').get();
-        const leaderboard = snap.docs
-            .map(d => d.data())
+        const { data: allStudents } = await supabase.from('profiles').select('*').eq('role', 'student');
+        const leaderboard = (allStudents || [])
             .filter(u => Number(u.en_yuksek_net || 0) > 0)
             .sort((a, b) => Number(b.en_yuksek_net) - Number(a.en_yuksek_net))
             .slice(0, 100)
@@ -1558,10 +1490,10 @@ app.post('/api/verify-optic-leaderboard', sensitiveActionLimiter, async (req, re
 
         const currentBest = Number(user.en_yuksek_net || 0);
         if (verifiedNet > currentBest) {
-            await db.collection('users').doc(user.id).update({
+            await supabase.from('profiles').update({
                 en_yuksek_net: verifiedNet,
                 en_yuksek_net_tarih: new Date().toISOString()
-            });
+            }).eq('id', user.id);
         }
 
         res.json({ success: true, verified_net: (verifiedNet > currentBest ? verifiedNet : currentBest).toFixed(2) });
@@ -1580,7 +1512,7 @@ app.post('/update-pomodoro', async (req, res) => {
         const minutes = Number(req.body.minutes) || 0;
         const newTotal = Number(user.pomodoro_dakika || 0) + minutes;
 
-        await db.collection('users').doc(user.id).update({ pomodoro_dakika: newTotal });
+        await supabase.from('profiles').update({ pomodoro_dakika: newTotal }).eq('id', user.id);
         res.json({ success: true, total_minutes: newTotal });
     } catch (e) {
         console.error(e);
@@ -1601,11 +1533,16 @@ app.post('/api/change-password', sensitiveActionLimiter, async (req, res) => {
         if (String(newPassword).length < 6) {
             return res.status(400).json({ success: false, message: 'Yeni şifre en az 6 karakter olmalı.' });
         }
-        if (!verifyPassword(oldPassword, user.sifre)) {
+        const { error: verifyError } = await supabaseAuthClient.auth.signInWithPassword({ email: user.email, password: oldPassword });
+        if (verifyError) {
             return res.status(401).json({ success: false, message: 'Mevcut şifre hatalı.' });
         }
 
-        await db.collection('users').doc(user.id).update({ sifre: hashPassword(newPassword) });
+        const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, { password: newPassword });
+        if (updateError) {
+            console.error(updateError);
+            return res.status(500).json({ success: false, message: 'Şifre değiştirilemedi.' });
+        }
         res.json({ success: true });
     } catch (e) {
         console.error(e);
@@ -1619,7 +1556,7 @@ app.post('/upgrade-premium', async (req, res) => {
         const user = await resolveUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
 
-        await db.collection('users').doc(user.id).update({ level: 'Premium' });
+        await supabase.from('profiles').update({ level: 'Premium' }).eq('id', user.id);
         if (req.session && req.session.userId === user.id) {
             req.session.userLevel = 'Premium';
         }
@@ -1657,7 +1594,7 @@ app.post('/destek', sensitiveActionLimiter, async (req, res) => {
             });
         }
 
-        await db.collection('destek_talepleri').add({
+        await supabase.from('destek_talepleri').insert({
             ad,
             email,
             konu: konu || 'Genel',
@@ -1683,5 +1620,5 @@ app.use((req, res) => {
 });
 
 app.listen(PORT, () => { 
-    console.log(`SmartStudy OS Firebase bağlantısı ile http://localhost:${PORT} adresinde çalışıyor!`); 
+    console.log(`SmartStudy OS Supabase bağlantısı ile http://localhost:${PORT} adresinde çalışıyor!`); 
 });
