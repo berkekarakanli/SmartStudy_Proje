@@ -88,12 +88,8 @@
             </div>
 
             <div class="mt-4">
-                <button class="btn-analyze orbitron" id="saveBtn" onclick="submitAnalysis(false)">
-                    <span id="saveSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>NET ANALİZİNİ KAYDET
-                </button>
-                <button class="btn-ai mt-2" id="aiBtn" onclick="handleAiClick()">
-                    <span id="aiSpinner" class="spinner-border spinner-border-sm d-none me-2"></span><i class="fas fa-brain me-1"></i>
-                    Yapay Zeka ile Analiz Et (<span id="aiRightsText">1 Hakkın Var</span>)
+                <button class="btn-analyze orbitron" id="saveBtn" onclick="submitAnalysis()">
+                    <span id="saveSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>NETLERİNİ SİSTEME KAYDET
                 </button>
             </div>
         </div>
@@ -140,18 +136,18 @@
         <% } %>
     </div>
 
-    <!-- YAPAY ZEKA HAKKI DOLDU MODALI -->
-    <div class="modal fade" id="aiLimitModal" tabindex="-1">
+    <!-- NETLER KAYDEDİLDİKTEN SONRA ÇIKAN YÖNLENDİRME MODALI -->
+    <div class="modal fade" id="netKaydedildiModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content bg-dark text-light border border-warning">
+            <div class="modal-content bg-dark text-light border border-info">
                 <div class="modal-header border-secondary">
-                    <h5 class="modal-title"><i class="fas fa-crown text-warning me-2"></i>Yapay Zeka Hakkı Doldu</h5>
+                    <h5 class="modal-title"><i class="fas fa-circle-check text-success me-2"></i>Netlerin Kaydedildi!</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body small text-secondary">Free üyelik için 1 defalık yapay zeka analiz hakkını kullandın. Sınırsız yapay zeka koçluğu için Premium'a geçmelisin!</div>
+                <div class="modal-body small text-secondary">Bu netleri AI Koç'un analiz etmesini, zayıf/güçlü yönlerini görmesini ister misin?</div>
                 <div class="modal-footer border-secondary">
-                    <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Vazgeç</button>
-                    <a href="/payment" class="btn btn-warning btn-sm fw-bold text-dark">Premium'a Yükselt</a>
+                    <a href="/dashboard" class="btn btn-outline-secondary btn-sm">Şimdi Değil</a>
+                    <a href="/student-coach#ai-koc" class="btn btn-info btn-sm fw-bold text-dark"><i class="fas fa-brain me-1"></i>Evet, AI Koç'a Git</a>
                 </div>
             </div>
         </div>
@@ -162,7 +158,6 @@
         const CURRENT_USER_ID = <%- JSON.stringify(user.id) %>;
         const IS_STUDENT = <%- isStudent %>;
         <% if (!isStudent) { %>const TEACHER_DATA = <%- JSON.stringify(teacherData) %>;<% } %>
-        let aiUsedBefore = false; // Uygulamadaki gibi sayfa yenilenince sıfırlanır
 
         const studentExamData = {
             'TYT': [
@@ -450,23 +445,14 @@
             aytCategoryEl.addEventListener('change', updateExamUI);
             updateExamUI();
 
-            window.handleAiClick = function () {
-                if (aiUsedBefore) {
-                    new bootstrap.Modal(document.getElementById('aiLimitModal')).show();
-                    return;
-                }
-                submitAnalysis(true);
-            };
-
-            window.submitAnalysis = async function (isAI) {
-                const spinner = document.getElementById(isAI ? 'aiSpinner' : 'saveSpinner');
+            window.submitAnalysis = async function () {
+                const spinner = document.getElementById('saveSpinner');
                 spinner.classList.remove('d-none');
 
                 const body = {
                     userId: CURRENT_USER_ID,
                     sinav_turu: activeKey(),
-                    role: 'student',
-                    is_ai_request: isAI.toString()
+                    role: 'student'
                 };
                 document.querySelectorAll('#netGrid input').forEach(inp => {
                     body[inp.dataset.field] = inp.value || '0';
@@ -479,9 +465,11 @@
                         body: JSON.stringify(body)
                     });
                     if (res.ok) {
-                        if (isAI) aiUsedBefore = true;
-                        showToast(isAI ? 'Yapay Zeka Analizi Tamamlandı!' : 'Net Analizi Başarıyla Kaydedildi!', 'success');
-                        setTimeout(() => { window.location.href = '/dashboard'; }, 900);
+                        // Kaydettikten sonra doğrudan dashboard'a atmak yerine,
+                        // kullanıcıya "bunu AI Koç'a analiz ettir" seçeneği
+                        // sunuyoruz - netler artık veritabanında olduğu için
+                        // AI Koç bunları oradan çekip gerçek bir yorum üretebilir.
+                        new bootstrap.Modal(document.getElementById('netKaydedildiModal')).show();
                     } else {
                         const data = await res.json().catch(() => ({}));
                         showToast(data.message || 'Sunucu işlem hatası döndü!', 'error');
