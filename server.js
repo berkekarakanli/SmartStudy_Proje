@@ -1893,11 +1893,16 @@ app.post('/destek', sensitiveActionLimiter, async (req, res) => {
 // için basit, salt-okunur bir panel. Sadece ADMIN_EMAIL ile eşleşen
 // hesaba giriş yapmış kullanıcı görebiliyor - ayrı bir "admin" rolü/kolonu
 // eklemeye şimdilik gerek yok, tek yönetici (kurucu) olduğu için.
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'berkekarakanli6@gmail.com').toLowerCase();
+//
+// GİZLİLİK: Kişisel bir e-posta adresini koda (dolayısıyla GitHub'a) hiç
+// yazmıyoruz - bu değer SADECE Render'ın Environment sekmesindeki
+// ADMIN_EMAIL değişkeninden geliyor. Tanımlı değilse /admin kimseye
+// açılmıyor (boş string hiçbir gerçek e-postayla eşleşmez).
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase();
 
 async function requireAdmin(req, res, next) {
     const user = await currentUser(req);
-    if (!user || String(user.email || '').toLowerCase() !== ADMIN_EMAIL) {
+    if (!ADMIN_EMAIL || !user || String(user.email || '').toLowerCase() !== ADMIN_EMAIL) {
         return res.status(404).send(errorPage('Sayfa Bulunamadı', 'Aradığınız rota mevcut değil.', '/dashboard'));
     }
     req.currentUser = user;
