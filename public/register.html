@@ -393,10 +393,11 @@
 
     <!-- ================================================================
          KVKK AYDINLATMA METNİ (MODAL)
-         NOT: Bu metin genel bir ŞABLONdur. Gerçek "veri sorumlusu" unvanı,
-         adresi, işlenen veri kategorileri ve saklama süreleri gibi detaylar
-         bir hukuk danışmanı tarafından SmartStudy'nin gerçek işleyişine göre
-         gözden geçirilip güncellenmelidir.
+         NOT: Bu metin, projenin gerçek veri işleme akışına (Supabase,
+         Render, Gemini AI) göre güncellendi. Yine de resmi bir hukuk
+         danışmanına onaylatılması, özellikle reşit olmayan kullanıcılar
+         (LGS öğrencileri) konusunda tavsiye edilir - burada eklenen beyan
+         cümlesi bu riski tamamen ortadan kaldırmaz, sadece azaltır.
          ================================================================ -->
     <div class="modal fade" id="kvkkModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-scrollable modal-lg">
@@ -406,22 +407,31 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body legal-modal-body">
-                    <p>SmartStudy ("Platform") olarak, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") uyarınca veri sorumlusu sıfatıyla, üyelik başvurunuz kapsamında aşağıdaki kişisel verilerinizi işlemekteyiz.</p>
+                    <p>Mustafa Berke Karakanlı ("Veri Sorumlusu", SmartStudy markası altında faaliyet göstermektedir) olarak, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") uyarınca veri sorumlusu sıfatıyla, üyelik başvurunuz kapsamında aşağıdaki kişisel verilerinizi işlemekteyiz.</p>
 
                     <h6>1. İşlenen Kişisel Veriler</h6>
-                    <p>Ad-soyad, e-posta adresi, şifreniz (geri döndürülemez biçimde şifrelenerek saklanır), rolünüz (öğrenci/öğretmen), akademik performans verileriniz (sınav netleri, analizler, ödevler) ve platform kullanım kayıtlarınız.</p>
+                    <p>Ad-soyad, e-posta adresi, şifreniz (geri döndürülemez biçimde şifrelenerek saklanır), rolünüz (öğrenci/öğretmen), akademik performans verileriniz (sınav netleri, analizler, ödevler, hata defteri kayıtları) ve platform kullanım kayıtlarınız.</p>
 
                     <h6>2. İşlenme Amacı</h6>
                     <p>Üyelik hesabınızın oluşturulması ve yönetimi, akademik analiz ve koçluk hizmetlerinin sunulması, hizmet kalitesinin artırılması ve yasal yükümlülüklerin yerine getirilmesi.</p>
 
-                    <h6>3. Hukuki Sebep</h6>
+                    <h6>3. Toplama Yöntemi</h6>
+                    <p>Kişisel verileriniz, bu kayıt formu aracılığıyla, web sitesi ve mobil uygulama üzerinden elektronik ortamda, tarafınızca doğrudan girilmek suretiyle toplanmaktadır.</p>
+
+                    <h6>4. Hukuki Sebep</h6>
                     <p>KVKK m.5/2 kapsamında bir sözleşmenin kurulması/ifası ve veri sorumlusunun meşru menfaati.</p>
 
-                    <h6>4. Saklama Süresi</h6>
+                    <h6>5. Kişisel Verilerin Aktarıldığı Taraflar</h6>
+                    <p>Verileriniz, platformun teknik altyapısını sağlayan şu hizmet sağlayıcılarla (yurt dışında konumlanmış sunucular dahil) paylaşılmaktadır: <strong>Supabase Inc.</strong> (veritabanı ve kimlik doğrulama altyapısı), <strong>Render Services Inc.</strong> (barındırma/sunucu hizmeti) ve, optik form okuma özelliğini kullanmanız halinde, <strong>Google LLC</strong> (Gemini AI, yalnızca yüklediğiniz optik formu okumak amacıyla). Bu aktarımlar, işbu onayınız kapsamında ve yalnızca hizmetin sunulması için gerekli ölçüde yapılmaktadır.</p>
+
+                    <h6>6. Saklama Süresi</h6>
                     <p>Verileriniz, üyeliğiniz aktif olduğu sürece ve ilgili mevzuatta öngörülen zamanaşımı süreleri boyunca saklanır; süre sonunda silinir, yok edilir veya anonim hale getirilir.</p>
 
-                    <h6>5. Haklarınız (KVKK m.11)</h6>
+                    <h6>7. Haklarınız (KVKK m.11)</h6>
                     <p>Kişisel verinizin işlenip işlenmediğini öğrenme, işlenmişse buna ilişkin bilgi talep etme, işlenme amacını ve amacına uygun kullanılıp kullanılmadığını öğrenme, yurt içi/yurt dışında aktarıldığı üçüncü kişileri bilme, eksik/yanlış işlenmişse düzeltilmesini isteme, KVKK'da öngörülen şartlarda silinmesini/yok edilmesini isteme, düzeltme/silme işlemlerinin verilerin aktarıldığı üçüncü kişilere bildirilmesini isteme, münhasıran otomatik sistemlerle analiz edilmesi nedeniyle aleyhinize bir sonuç ortaya çıkmasına itiraz etme ve zarara uğramanız hâlinde zararın giderilmesini talep etme haklarına sahipsiniz.</p>
+
+                    <h6>8. Reşit Olmayan Kullanıcılar</h6>
+                    <p>18 yaşından küçükseniz, bu platformu kullanmak ve işbu Aydınlatma Metni kapsamında kişisel verilerinizin işlenmesine onay vermek için yasal temsilcinizin (anne, baba veya vasi) rızasını almış olmanız gerekmektedir. Bu onay kutusunu işaretleyerek, söz konusu rızayı aldığınızı beyan etmiş olursunuz.</p>
 
                     <p class="text-secondary small mt-4">Haklarınızı kullanmak için <a href="mailto:berkekarakanli6@gmail.com" class="text-info">berkekarakanli6@gmail.com</a> adresinden bizimle iletişime geçebilirsiniz.</p>
                 </div>
