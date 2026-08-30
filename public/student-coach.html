@@ -50,6 +50,83 @@
             </form>
         </div>
 
+        <div class="card bg-dark border-info border-opacity-25 p-3 mb-4" id="ai-koc">
+            <h6 class="text-info orbitron mb-3"><i class="fas fa-brain me-2"></i>AI Koç</h6>
+
+            <% if (analizSayisi === 0) { %>
+                <p class="text-white small mb-3">AI Koç'un sana yorum yapabilmesi için önce en az bir net analizi eklemen gerekiyor - yoksa üzerinde çalışacağı gerçek bir veri olmaz.</p>
+                <a href="/plan" class="btn btn-info btn-sm text-dark fw-bold">Net Analizi Ekle</a>
+            <% } else if (!user.ai_onboarding_tamamlandi) { %>
+                <p class="text-secondary small mb-3">Sana uygun bir çalışma/ödev programı çıkarabilmemiz için önce birkaç şey bilmemiz lazım - bu sadece bir kez sorulacak.</p>
+                <form id="onboardingForm" class="mb-2" onsubmit="return false;">
+                    <div class="mb-2">
+                        <label class="form-label small text-secondary mb-1">Sınıfın</label>
+                        <select class="form-select form-select-sm bg-dark text-white border-secondary" id="ob_sinif">
+                            <option value="">Seç...</option>
+                            <% gecerliSiniflar.forEach(s => { %>
+                                <option value="<%= s %>"><%= s === 'KPSS Adayı' ? s : (s + '. Sınıf') %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="mb-2 d-none" id="ob_ayt_wrap">
+                        <label class="form-label small text-secondary mb-1">AYT Alanın</label>
+                        <select class="form-select form-select-sm bg-dark text-white border-secondary" id="ob_ayt_alani">
+                            <option value="SAY">Sayısal</option>
+                            <option value="EA">Eşit Ağırlık</option>
+                            <option value="SOZ">Sözel</option>
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small text-secondary mb-1">Hedefin (isteğe bağlı - örn. bir bölüm/meslek adı)</label>
+                        <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="ob_hedef" maxlength="200" placeholder="Örn: Bilgisayar Mühendisliği">
+                        <div class="text-muted mt-1" style="font-size:11px;">Bu bilgi sadece motivasyon/planlama amaçlı kullanılır - taban puan tahmini değildir, güncel bilgi için ÖSYM kılavuzuna bak.</div>
+                    </div>
+                    <div class="mb-2" id="ob_kaynak_wrap">
+                        <label class="form-label small text-secondary mb-1">Ders bazında kaç kaynağın (kitap/föy) var?</label>
+                        <div id="ob_kaynak_dersleri" class="text-muted small">Önce sınıfını seç.</div>
+                    </div>
+                    <button class="btn btn-info btn-sm text-dark fw-bold" id="obKaydetBtn" onclick="aiOnboardingKaydet()">
+                        <span id="obSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>Kaydet
+                    </button>
+                </form>
+            <% } else { %>
+                <p class="text-secondary small mb-3">En son net analizini ve hata defterini okuyup sana disiplinli, somut bir değerlendirme yapar.</p>
+
+                <div id="aiSonuc" class="mb-3 <%= aiGecmisi.length === 0 ? 'd-none' : '' %>">
+                    <% if (aiGecmisi.length > 0) { %>
+                        <div class="p-3 rounded" style="background:#0f172a; border:1px solid rgba(13,202,240,.25); white-space:pre-wrap; line-height:1.6;" id="aiSonucMetni"><%= aiGecmisi[0].yorum %></div>
+                        <div class="text-secondary small mt-1"><%= new Date(aiGecmisi[0].tarih).toLocaleString('tr-TR') %></div>
+                    <% } %>
+                </div>
+
+                <% if (aiHakkiVar) { %>
+                    <button class="btn btn-info btn-sm text-dark fw-bold" id="aiKocBtn" onclick="aiKocAnalizIste()">
+                        <span id="aiKocSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>
+                        <i class="fas fa-wand-magic-sparkles me-1"></i><%= aiGecmisi.length > 0 ? 'Yeni Analiz İste' : 'AI Koç\'tan Analiz İste' %>
+                    </button>
+                    <% if (user.level !== 'Premium') { %>
+                        <div class="text-secondary small mt-2">Free üyelikte 1 kez kullanabilirsin.</div>
+                    <% } %>
+                <% } else { %>
+                    <div class="alert alert-warning small mb-0">
+                        <i class="fas fa-crown me-1"></i>Free üyelik için 1 defalık AI Koç hakkını kullandın. Sınırsız kullanım için <a href="/payment" class="alert-link">Premium'a geç</a>.
+                    </div>
+                <% } %>
+
+                <% if (aiGecmisi.length > 1) { %>
+                    <details class="mt-3">
+                        <summary class="text-secondary small" style="cursor:pointer;">Geçmiş yorumları göster (<%= aiGecmisi.length - 1 %>)</summary>
+                        <% aiGecmisi.slice(1).forEach(g => { %>
+                            <div class="p-2 rounded mt-2 text-secondary small" style="background:#0f172a; border:1px solid rgba(255,255,255,.08); white-space:pre-wrap;">
+                                <%= g.yorum %>
+                                <div class="text-muted mt-1" style="font-size:.7rem;"><%= new Date(g.tarih).toLocaleString('tr-TR') %></div>
+                            </div>
+                        <% }) %>
+                    </details>
+                <% } %>
+            <% } %>
+        </div>
+
         <h6 class="text-info orbitron mb-3">Koç Tarafından Verilen Ödevler (<%= homeworks.length %>)</h6>
         <% if (homeworks.length === 0) { %>
             <p class="text-secondary small">Şu an atanmış aktif ödevin yok.</p>
@@ -63,7 +140,7 @@
                     <div class="form-check m-0">
                         <input class="form-check-input hw-toggle" type="checkbox" data-id="<%= hw.id %>" id="hw-<%= hw.id %>" <%= completed ? 'checked' : '' %>>
                         <label class="form-check-label <%= completed ? 'text-white-50 text-decoration-line-through' : 'text-white' %>" for="hw-<%= hw.id %>">
-                            <strong><%= hw.subject || 'Ders' %></strong> — <%= hw.exam_type || '' %><% if (hw.question_count) { %> <span class="badge bg-warning text-dark"><%= hw.question_count %> soru</span><% } %><br>
+                            <strong><%= hw.subject || 'Ders' %></strong> — <%= hw.exam_type || '' %><% if (hw.question_count) { %> <span class="badge bg-warning text-dark"><%= hw.question_count %> soru</span><% } %><% if (hw.source === 'ai') { %> <span class="badge bg-info text-dark"><i class="fas fa-brain"></i> AI Koç</span><% } %><br>
                             <span class="text-secondary small"><%= topic %></span>
                         </label>
                     </div>
@@ -72,6 +149,126 @@
         <% }) %>
     </main>
     <script>
+        const ONBOARDING_DERSLERI = <%- JSON.stringify(typeof onboardingDersleri !== 'undefined' ? onboardingDersleri : {}) %>;
+
+        function obDersleriGuncelle() {
+            const sinif = document.getElementById('ob_sinif').value;
+            const aytWrap = document.getElementById('ob_ayt_wrap');
+            const kaynakDiv = document.getElementById('ob_kaynak_dersleri');
+            const aytGerekli = sinif === '11' || sinif === '12' || sinif === 'Mezun';
+            aytWrap.classList.toggle('d-none', !aytGerekli);
+
+            let dersler = [];
+            if (!sinif) {
+                kaynakDiv.innerHTML = 'Önce sınıfını seç.';
+                return;
+            }
+            if (aytGerekli) {
+                const alan = document.getElementById('ob_ayt_alani').value || 'SAY';
+                dersler = ONBOARDING_DERSLERI[sinif + '_' + alan] || [];
+            } else {
+                dersler = ONBOARDING_DERSLERI[sinif] || [];
+            }
+
+            kaynakDiv.innerHTML = dersler.map(ders =>
+                '<div class="d-flex justify-content-between align-items-center mb-1">' +
+                    '<span class="text-white small">' + ders + '</span>' +
+                    '<input type="number" min="0" max="20" value="0" class="form-control form-control-sm bg-dark text-white border-secondary ob-kaynak-input" data-ders="' + ders + '" style="width:70px;">' +
+                '</div>'
+            ).join('') || '<span class="text-muted">Bu sınıf için ders listesi bulunamadı.</span>';
+        }
+
+        (function () {
+            const sinifEl = document.getElementById('ob_sinif');
+            const aytEl = document.getElementById('ob_ayt_alani');
+            if (sinifEl) {
+                sinifEl.addEventListener('change', obDersleriGuncelle);
+                if (aytEl) aytEl.addEventListener('change', obDersleriGuncelle);
+            }
+        })();
+
+        async function aiOnboardingKaydet() {
+            const btn = document.getElementById('obKaydetBtn');
+            const spinner = document.getElementById('obSpinner');
+            const sinif = document.getElementById('ob_sinif').value;
+            if (!sinif) { showToast('Lütfen sınıfını seç.', 'error'); return; }
+
+            const aytGerekli = sinif === '11' || sinif === '12' || sinif === 'Mezun';
+            const aytAlani = aytGerekli ? document.getElementById('ob_ayt_alani').value : undefined;
+            const hedef = document.getElementById('ob_hedef').value;
+
+            const kaynakSayilari = {};
+            document.querySelectorAll('.ob-kaynak-input').forEach(inp => {
+                kaynakSayilari[inp.dataset.ders] = inp.value;
+            });
+
+            btn.disabled = true;
+            spinner.classList.remove('d-none');
+            try {
+                const res = await fetch('/api/ai-koc/onboarding', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sinif, aytAlani, hedef, kaynakSayilari })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    showToast(data.message || 'Kaydedilemedi.', 'error');
+                }
+            } catch (err) {
+                showToast('Bağlantı hatası oluştu, tekrar dene.', 'error');
+            } finally {
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+            }
+        }
+
+        async function aiKocAnalizIste() {
+            const btn = document.getElementById('aiKocBtn');
+            const spinner = document.getElementById('aiKocSpinner');
+            if (!btn || btn.disabled) return;
+
+            btn.disabled = true;
+            spinner.classList.remove('d-none');
+
+            try {
+                const res = await fetch('/api/ai-koc/analiz-et', { method: 'POST' });
+                const data = await res.json();
+
+                if (data.success) {
+                    const sonucDiv = document.getElementById('aiSonuc');
+                    const metinDiv = document.getElementById('aiSonucMetni');
+                    if (metinDiv) {
+                        metinDiv.textContent = data.yorum;
+                    } else {
+                        sonucDiv.innerHTML = '<div class="p-3 rounded" style="background:#0f172a; border:1px solid rgba(13,202,240,.25); white-space:pre-wrap; line-height:1.6;" id="aiSonucMetni"></div>';
+                        document.getElementById('aiSonucMetni').textContent = data.yorum;
+                    }
+                    sonucDiv.classList.remove('d-none');
+                    btn.innerHTML = '<i class="fas fa-wand-magic-sparkles me-1"></i>Yeni Analiz İste';
+                    if (data.odevSayisi > 0) {
+                        showToast('AI Koç yorumunu güncelledi ve sana ' + data.odevSayisi + ' yeni ödev hazırladı.', 'success');
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        showToast('AI Koç yorumunu güncelledi.', 'success');
+                    }
+                } else if (data.limitDoldu) {
+                    btn.outerHTML = '<div class="alert alert-warning small mb-0"><i class="fas fa-crown me-1"></i>' + data.message + ' <a href="/payment" class="alert-link">Premium\'a geç</a>.</div>';
+                    return;
+                } else {
+                    showToast(data.message || 'AI Koç şu an yanıt veremedi.', 'error');
+                }
+            } catch (err) {
+                showToast('Bağlantı hatası oluştu, tekrar dene.', 'error');
+            } finally {
+                if (document.body.contains(btn)) {
+                    btn.disabled = false;
+                    spinner.classList.add('d-none');
+                }
+            }
+        }
+
         document.querySelectorAll('.hw-toggle').forEach(cb => {
             cb.addEventListener('change', async () => {
                 const res = await fetch('/api/update-homework', {

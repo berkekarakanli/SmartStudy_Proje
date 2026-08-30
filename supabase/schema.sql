@@ -52,7 +52,15 @@ create table public.profiles (
     en_yuksek_net numeric,
     en_yuksek_net_tarih timestamptz,
 
-    kayit_tarihi timestamptz not null default now()
+    kayit_tarihi timestamptz not null default now(),
+
+    -- AI Koç onboarding (Faz 2/3) - sınıfına/hedefine/kaynak sayısına göre
+    -- kişiselleştirilmiş çalışma programı üretebilmek için bir kere sorulur.
+    sinif text,
+    ayt_alani text check (ayt_alani in ('SAY', 'EA', 'SOZ')),
+    hedef text,
+    kaynak_sayilari jsonb default '{}'::jsonb,
+    ai_onboarding_tamamlandi boolean not null default false
 );
 
 create index idx_profiles_referral_code on public.profiles(referral_code);
@@ -104,7 +112,9 @@ create index idx_wrong_questions_user_id on public.wrong_questions(user_id);
 -- ==========================================
 create table public.homeworks (
     id uuid primary key default gen_random_uuid(),
-    teacher_id uuid not null references public.profiles(id) on delete cascade,
+    -- AI Koç'un ürettiği ödevlerde öğretmen olmadığı için nullable -
+    -- kaynağı (kim verdi) ayrıca "source" sütununda tutuluyor.
+    teacher_id uuid references public.profiles(id) on delete cascade,
     student_id uuid not null references public.profiles(id) on delete cascade,
     exam_type text not null,
     subject text not null default 'Genel',
@@ -112,7 +122,8 @@ create table public.homeworks (
     question_count integer,
     date_assigned timestamptz not null default now(),
     status text not null default 'pending',
-    completed boolean not null default false
+    completed boolean not null default false,
+    source text not null default 'teacher' check (source in ('teacher', 'ai'))
 );
 
 create index idx_homeworks_teacher_id on public.homeworks(teacher_id);
@@ -255,3 +266,18 @@ create table public.admin_log (
 create index idx_admin_log_tarih on public.admin_log(tarih);
 
 alter table public.admin_log enable row level security;
+
+-- ==========================================
+-- AI_YORUMLARI (AI Koç'un ürettiği net analizi yorumları)
+-- ==========================================
+create table public.ai_yorumlari (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references public.profiles(id) on delete cascade,
+    analiz_id uuid references public.analizler(id) on delete set null,
+    yorum text not null,
+    tarih timestamptz not null default now()
+);
+
+create index idx_ai_yorumlari_user_id on public.ai_yorumlari(user_id);
+
+alter table public.ai_yorumlari enable row level security;

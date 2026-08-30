@@ -11,7 +11,8 @@ const crypto = require('crypto');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const ejs = require('ejs');
-const { readNetFromOpticImage } = require('./geminiService');
+const { readNetFromOpticImage, generateNetAnalysis, generateHomeworkPlan } = require('./geminiService');
+const { EXAM_DATES, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getKaynakDersleri } = require('./curriculum');
 
 const app = express();
 
@@ -1322,10 +1323,184 @@ app.get('/student-coach', requireLogin, async (req, res) => {
         const { data: homeworks } = await supabase.from('homeworks').select('*').eq('student_id', user.id);
         const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ kod: user.bagli_koc_kodu, ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
 
-        res.render('student-coach', { user, homeworks: homeworks || [], kocListesi });
+        // AI Koç bölümü için: en az bir net analizi var mı, kaç tane AI
+        // yorumu hakkı kaldı, geçmiş yorumlar neler - hepsini burada
+        // topluyoruz ki student-coach.html tek seferde render edebilsin.
+        const { data: analizler } = await supabase.from('analizler').select('id').eq('user_id', user.id);
+        const analizSayisi = (analizler || []).length;
+        const { data: aiGecmisi } = await supabase.from('ai_yorumlari').select('*').eq('user_id', user.id).order('tarih', { ascending: false });
+        const aiKullanimSayisi = (aiGecmisi || []).length;
+        // Free: ömür boyu 1 hak. Premium: sınırsız.
+        const aiHakkiVar = user.level === 'Premium' || aiKullanimSayisi < 1;
+
+        // AI Koç onboarding (Faz 2/3): sınıf/hedef/kaynak bilgisi henüz
+        // alınmadıysa formda hangi derslerin sorulacağını, sınıf seçimine
+        // göre client tarafında dinamik hesaplayabilmesi için tüm sınıf
+        // seçeneklerinin ders listesini önceden çıkarıp gönderiyoruz.
+        const onboardingDersleri = {};
+        GECERLI_SINIFLAR.forEach(s => {
+            if (s === '11' || s === '12' || s === 'Mezun') {
+                GECERLI_AYT_ALANLARI.forEach(alan => {
+                    onboardingDersleri[`${s}_${alan}`] = getKaynakDersleri(s, alan);
+                });
+            } else {
+                onboardingDersleri[s] = getKaynakDersleri(s);
+            }
+        });
+
+        res.render('student-coach', {
+            user,
+            homeworks: homeworks || [],
+            kocListesi,
+            analizSayisi,
+            aiGecmisi: aiGecmisi || [],
+            aiHakkiVar,
+            gecerliSiniflar: GECERLI_SINIFLAR,
+            onboardingDersleri
+        });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Koç bilgisi yüklenirken sorun oluştu.', '/dashboard'));
+    }
+});
+
+// AI Koç onboarding (Faz 2/3) - sınıf/hedef/ders bazlı kaynak sayısını bir
+// kere alıp profile kaydediyor, bir daha sorulmuyor.
+app.post('/api/ai-koc/onboarding', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const { sinif, aytAlani, hedef, kaynakSayilari } = req.body;
+
+        if (!sinif || !GECERLI_SINIFLAR.includes(sinif)) {
+            return res.status(400).json({ success: false, message: 'Geçerli bir sınıf seçmelisin.' });
+        }
+        const sinifAytGerektirir = sinif === '11' || sinif === '12' || sinif === 'Mezun';
+        if (sinifAytGerektirir && !GECERLI_AYT_ALANLARI.includes(aytAlani)) {
+            return res.status(400).json({ success: false, message: 'Geçerli bir AYT alanı seçmelisin.' });
+        }
+
+        const dersListesi = getKaynakDersleri(sinif, sinifAytGerektirir ? aytAlani : undefined);
+        const temizKaynakSayilari = {};
+        dersListesi.forEach(ders => {
+            const ham = kaynakSayilari ? kaynakSayilari[ders] : undefined;
+            const sayi = Number.parseInt(ham, 10);
+            temizKaynakSayilari[ders] = Number.isFinite(sayi) && sayi >= 0 && sayi <= 20 ? sayi : 0;
+        });
+
+        await supabase.from('profiles').update({
+            sinif,
+            ayt_alani: sinifAytGerektirir ? aytAlani : null,
+            hedef: typeof hedef === 'string' ? hedef.slice(0, 200) : null,
+            kaynak_sayilari: temizKaynakSayilari,
+            ai_onboarding_tamamlandi: true
+        }).eq('id', user.id);
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
+    }
+});
+
+// AI Koç'un gerçek analiz üretme ucu - kullanıcının en son net analizini ve
+// hata defterindeki son sorularını okuyup Gemini'ye gönderiyor, sonucu
+// ai_yorumlari tablosuna kaydedip aynı anda ekrana da dönüyor. Onboarding
+// tamamlanmışsa aynı anda sınıfına/kaynak sayısına/sınav tarihine uygun bir
+// ödev planı da üretip homeworks tablosuna ekliyor.
+app.post('/api/ai-koc/analiz-et', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const { count: aiKullanimSayisi } = await supabase.from('ai_yorumlari').select('id', { count: 'exact', head: true }).eq('user_id', user.id);
+        if (user.level !== 'Premium' && (aiKullanimSayisi || 0) >= 1) {
+            return res.status(403).json({ success: false, message: 'Free üyelikte 1 kez AI Koç kullanabilirsin. Sınırsız kullanım için Premium\'a geçmelisin.', limitDoldu: true });
+        }
+
+        const { data: sonAnaliz } = await supabase.from('analizler').select('*').eq('user_id', user.id).order('tarih', { ascending: false }).limit(1).maybeSingle();
+        if (!sonAnaliz) {
+            return res.status(400).json({ success: false, message: 'Önce en az bir net analizi eklemelisin.' });
+        }
+
+        const { data: hataKayitlari } = await supabase.from('wrong_questions').select('question_text').eq('user_id', user.id).order('tarih', { ascending: false }).limit(15);
+        const hataDefteriSorulari = (hataKayitlari || []).map(h => h.question_text).filter(Boolean);
+
+        const yorum = await generateNetAnalysis({
+            sinavTuru: sonAnaliz.sinav_turu,
+            detaylar: sonAnaliz.detaylar,
+            toplamNet: sonAnaliz.toplam_net,
+            hataDefteriSorulari
+        });
+
+        if (!yorum) {
+            return res.status(503).json({ success: false, message: 'AI Koç şu an yanıt veremedi, birkaç dakika sonra tekrar dene.' });
+        }
+
+        await supabase.from('ai_yorumlari').insert({ user_id: user.id, analiz_id: sonAnaliz.id, yorum });
+
+        let odevSayisi = 0;
+        if (user.ai_onboarding_tamamlandi && user.sinif) {
+            try {
+                const sinifAytGerektirir = user.sinif === '11' || user.sinif === '12' || user.sinif === 'Mezun';
+                const { sinavTuru, dersler: izinliMufredat } = getMufredat(user.sinif, sinifAytGerektirir ? user.ayt_alani : undefined);
+
+                const examKey = sinavTuru === 'TYT+AYT' ? 'AYT' : sinavTuru; // TYT+AYT ise daha uzak olan AYT tarihini esas al
+                const sinavTarihi = EXAM_DATES[examKey] || EXAM_DATES.TYT;
+                const kalanGun = Math.max(0, Math.ceil((new Date(sinavTarihi) - new Date()) / 86400000));
+
+                const plan = await generateHomeworkPlan({
+                    sinif: user.sinif,
+                    sinavTuru,
+                    aytAlani: user.ayt_alani,
+                    hedef: user.hedef,
+                    kaynakSayilari: user.kaynak_sayilari || {},
+                    izinliMufredat,
+                    sinavTarihi,
+                    kalanGun,
+                    sonAnaliz,
+                    hataDefteriSorulari
+                });
+
+                if (plan && Array.isArray(plan.odevler)) {
+                    // Modelin döndürdüğü konuların gerçekten izin verilen
+                    // müfredatta olduğunu tekrar sunucu tarafında doğruluyoruz
+                    // (savunma katmanı - model kurala uymasa bile taşmasın).
+                    const izinliKonular = new Set(Object.values(izinliMufredat).flat());
+                    const satirlar = plan.odevler
+                        .filter(o => o && typeof o.ders === 'string' && Array.isArray(o.konular))
+                        .map(o => ({
+                            teacher_id: null,
+                            student_id: user.id,
+                            exam_type: sinavTuru,
+                            subject: o.ders,
+                            topics: o.konular.filter(k => izinliKonular.has(k)),
+                            question_count: Number.isFinite(Number(o.soru_sayisi)) ? Math.min(60, Math.max(1, Math.round(Number(o.soru_sayisi)))) : 10,
+                            date_assigned: new Date().toISOString(),
+                            status: 'pending',
+                            completed: false,
+                            source: 'ai'
+                        }))
+                        .filter(o => o.topics.length > 0);
+
+                    if (satirlar.length > 0) {
+                        await supabase.from('homeworks').insert(satirlar);
+                        odevSayisi = satirlar.length;
+                    }
+                }
+            } catch (planError) {
+                // Ödev planı üretimi başarısız olsa bile Faz 1 yorumu zaten
+                // kaydedildi - kullanıcı deneyimini bozmamak için sessizce
+                // logluyoruz, isteği hataya düşürmüyoruz.
+                console.error('[AI Koç] Ödev planı oluşturulamadı:', planError?.message || planError);
+            }
+        }
+
+        res.json({ success: true, yorum, odevSayisi });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
     }
 });
 // Eski isim (/my-coach) ile gelen linkler/yer imleri kırılmasın diye yönlendirme.
