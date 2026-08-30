@@ -590,13 +590,16 @@ function verifyEmailForm(email, message, isError) {
     return authShell({
         title: 'E-Postanı Doğrula',
         subtitleHtml: `<strong class="text-info">${escapeHtml(email)}</strong> adresine gönderdiğimiz 8 haneli kodu gir.`,
-        icon: 'fa-envelope-circle-check',
+        icon: 'fa-envelope-open-text',
         bodyHtml: `
             ${message ? `<div class="alert-box ${isError ? 'error' : 'info'}">${escapeHtml(message)}</div>` : ''}
-            <form method="POST" action="/verify-email" class="d-flex flex-column gap-2">
+            <form method="POST" action="/verify-email">
                 <input type="hidden" name="email" value="${escapeHtml(email)}">
-                <input type="text" name="code" class="form-control space-input code-input" placeholder="········" inputmode="numeric" maxlength="8" required autofocus>
-                <button type="submit" class="btn-access orbitron mt-2">Doğrula</button>
+                <div class="field">
+                    <label class="form-label">Doğrulama Kodu</label>
+                    <input type="text" name="code" class="form-control space-input code-input" placeholder="········" inputmode="numeric" maxlength="8" required autofocus>
+                </div>
+                <button type="submit" class="btn-access orbitron">Doğrula</button>
             </form>`
     });
 }
@@ -715,25 +718,28 @@ function authShell({ title, subtitleHtml, icon = 'fa-shield-halved', bodyHtml, b
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
         <style>
             :root { --theme-color: #0dcaf0; --theme-gradient: linear-gradient(135deg, #0dcaf0 0%, #007bff 100%); --theme-shadow: rgba(13, 202, 240, 0.4); }
-            body { margin: 0; min-height: 100vh; width: 100%; background-color: #020617; font-family: 'Inter', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 16px; box-sizing: border-box; }
+            * { box-sizing: border-box; }
+            body { margin: 0; min-height: 100vh; width: 100%; background-color: #020617; color: #f8fafc; font-family: 'Inter', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 16px; }
             .orbitron { font-family: 'Orbitron', sans-serif; }
-            .auth-card { background: rgba(15, 23, 42, 0.72); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 28px; padding: 40px; width: 100%; max-width: 420px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); box-sizing: border-box; }
-            @media (max-width: 480px) { .auth-card { padding: 28px 20px; border-radius: 22px; } }
-            .icon-badge { width: 64px; height: 64px; border-radius: 50%; background: rgba(13, 202, 240, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; border: 1px solid rgba(13, 202, 240, 0.3); }
-            .icon-badge i { font-size: 1.6rem; color: var(--theme-color); }
-            .form-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin-bottom: 8px; }
+            .auth-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 28px; padding: 44px 40px; width: 100%; max-width: 420px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); }
+            @media (max-width: 480px) { .auth-card { padding: 32px 22px; border-radius: 22px; } body { padding: 24px 14px; } }
+            .icon-badge { width: 68px; height: 68px; border-radius: 50%; background: rgba(13, 202, 240, 0.12); display: flex; align-items: center; justify-content: center; margin: 0 auto 22px; border: 1px solid rgba(13, 202, 240, 0.35); box-shadow: 0 0 24px var(--theme-shadow); }
+            .icon-badge i { font-size: 1.7rem; color: var(--theme-color); }
+            h3.orbitron { color: #f8fafc; letter-spacing: 1px; }
+            .form-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin-bottom: 8px; display: block; text-align: left; }
             .input-group-text { background: rgba(2, 6, 23, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); color: #64748b; }
             .space-input { background: rgba(2, 6, 23, 0.8) !important; border: 1px solid rgba(255, 255, 255, 0.08) !important; color: #f8fafc !important; }
             .space-input::placeholder { color: #64748b; }
             .space-input:focus { border-color: var(--theme-color) !important; box-shadow: 0 0 0 0.2rem var(--theme-shadow) !important; }
             .code-input { letter-spacing: 8px; font-size: 1.3rem; font-weight: 700; text-align: center; }
-            .btn-access { border: none; color: #000; font-weight: 800; padding: 14px; border-radius: 12px; width: 100%; text-transform: uppercase; letter-spacing: 2px; transition: 0.3s; cursor: pointer; background: var(--theme-gradient); }
-            .btn-access:hover { box-shadow: 0 10px 25px var(--theme-shadow); }
+            .field { margin-bottom: 18px; text-align: left; }
+            .btn-access { border: none; color: #000; font-weight: 800; padding: 14px; border-radius: 12px; width: 100%; text-transform: uppercase; letter-spacing: 2px; transition: 0.3s; cursor: pointer; background: var(--theme-gradient); font-size: 0.9rem; }
+            .btn-access:hover { box-shadow: 0 10px 25px var(--theme-shadow); transform: translateY(-1px); }
             .bottom-link { color: var(--theme-color); text-decoration: none; font-weight: 600; }
             .bottom-link:hover { text-decoration: underline; }
-            .back-home { color: #64748b; text-decoration: none; font-size: 0.85rem; margin-top: 24px; display: inline-block; }
+            .back-home { color: #64748b; text-decoration: none; font-size: 0.85rem; margin-top: 28px; display: inline-block; }
             .back-home:hover { color: var(--theme-color); }
-            .alert-box { border-radius: 14px; padding: 12px 16px; font-size: 0.85rem; margin-bottom: 16px; text-align: left; }
+            .alert-box { border-radius: 14px; padding: 12px 16px; font-size: 0.85rem; margin-bottom: 18px; text-align: left; }
             .alert-box.info { background: rgba(13, 202, 240, 0.1); border: 1px solid rgba(13, 202, 240, 0.3); color: #7dd8ec; }
             .alert-box.error { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; }
         </style>
@@ -741,8 +747,8 @@ function authShell({ title, subtitleHtml, icon = 'fa-shield-halved', bodyHtml, b
     <body>
         <main class="auth-card text-center">
             <div class="icon-badge"><i class="fas ${icon}"></i></div>
-            <h3 class="orbitron fw-bold mb-1">${escapeHtml(title)}</h3>
-            <p class="text-secondary small mb-4">${subtitleHtml}</p>
+            <h3 class="orbitron fw-bold mb-2">${escapeHtml(title)}</h3>
+            <p class="text-secondary small mb-4" style="line-height: 1.5;">${subtitleHtml}</p>
             ${bodyHtml}
         </main>
         <a href="${backHref}" class="back-home"><i class="fas fa-arrow-left me-1"></i>${escapeHtml(backLabel)}</a>
@@ -757,9 +763,15 @@ function forgotPasswordForm(message) {
         icon: 'fa-key',
         bodyHtml: `
             ${message ? `<div class="alert-box info">${escapeHtml(message)}</div>` : ''}
-            <form method="POST" action="/forgot-password" class="d-flex flex-column gap-2">
-                <input type="email" name="email" class="form-control space-input" placeholder="E-posta adresin" required>
-                <button type="submit" class="btn-access orbitron mt-2">Kod Gönder</button>
+            <form method="POST" action="/forgot-password">
+                <div class="field">
+                    <label class="form-label">E-Posta Adresi</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                        <input type="email" name="email" class="form-control space-input" placeholder="ornek@email.com" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-access orbitron">Kod Gönder</button>
             </form>`
     });
 }
@@ -793,11 +805,20 @@ function resetPasswordForm(email, message, isError) {
         backLabel: 'Kodu Tekrar Gönder',
         bodyHtml: `
             ${message ? `<div class="alert-box ${isError ? 'error' : 'info'}">${escapeHtml(message)}</div>` : ''}
-            <form method="POST" action="/reset-password" class="d-flex flex-column gap-2">
+            <form method="POST" action="/reset-password">
                 <input type="hidden" name="email" value="${escapeHtml(email)}">
-                <input type="text" name="code" class="form-control space-input code-input" placeholder="········" inputmode="numeric" maxlength="8" required autofocus>
-                <input type="password" name="newPassword" class="form-control space-input" placeholder="Yeni şifre (en az 8 karakter)" minlength="8" required>
-                <button type="submit" class="btn-access orbitron mt-2">Şifreyi Güncelle</button>
+                <div class="field">
+                    <label class="form-label">Doğrulama Kodu</label>
+                    <input type="text" name="code" class="form-control space-input code-input" placeholder="········" inputmode="numeric" maxlength="8" required autofocus>
+                </div>
+                <div class="field">
+                    <label class="form-label">Yeni Şifre</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                        <input type="password" name="newPassword" class="form-control space-input" placeholder="En az 8 karakter" minlength="8" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-access orbitron">Şifreyi Güncelle</button>
             </form>`
     });
 }
