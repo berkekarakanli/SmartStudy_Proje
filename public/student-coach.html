@@ -74,6 +74,39 @@
             </form>
         </div>
 
+        <% if (konuDurumuMufredat) { %>
+        <div class="premium-card premium-card--cyan mb-4">
+            <div class="card-title-row">
+                <div class="icon-badge"><i class="fas fa-list-check"></i></div>
+                <h6 class="orbitron mb-0">Hangi Konuları Bitirdin?</h6>
+            </div>
+            <p class="text-secondary small mb-3">Sana uygun bir ödev/çalışma programı çıkarabilmemiz için bunu bir kez soruyoruz. Bitirdiğin konuları işaretle; hiçbirini bitirmediysen aşağıdaki butonla sıfırdan başlayabilirsin.</p>
+
+            <div id="konuListesi">
+                <% Object.entries(konuDurumuMufredat).forEach(([ders, konular]) => { %>
+                    <details class="mb-2">
+                        <summary class="text-white small fw-bold" style="cursor:pointer;"><%= ders %></summary>
+                        <div class="ps-3 pt-2">
+                            <% konular.forEach(konu => { %>
+                                <div class="form-check">
+                                    <input class="form-check-input konu-check" type="checkbox" value="<%= konu %>" data-ders="<%= ders %>" id="k-<%= ders %>-<%= konu %>">
+                                    <label class="form-check-label text-secondary small" for="k-<%= ders %>-<%= konu %>"><%= konu %></label>
+                                </div>
+                            <% }) %>
+                        </div>
+                    </details>
+                <% }) %>
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap mt-3">
+                <button class="btn btn-info text-dark fw-bold btn-sm" id="konuKaydetBtn" onclick="konuDurumuKaydet(false)">
+                    <span id="konuKaydetSpinner" class="spinner-border spinner-border-sm d-none me-1"></span>İşaretlediklerimi Kaydet
+                </button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="konuDurumuKaydet(true)">Hiçbirini Bitirmedim, Sıfırdan Başlıyorum</button>
+            </div>
+        </div>
+        <% } %>
+
         <div class="premium-card premium-card--cyan" id="ai-koc">
             <div class="card-title-row">
                 <div class="icon-badge"><i class="fas fa-brain"></i></div>
@@ -105,24 +138,72 @@
         <% if (homeworks.length === 0) { %>
             <p class="text-secondary small">Şu an atanmış aktif ödevin yok.</p>
         <% } %>
-        <% homeworks.forEach(hw => {
-            const completed = hw.completed === true || hw.status === 'completed';
-            const topic = Array.isArray(hw.topics) ? hw.topics.join(', ') : (hw.topics || '');
+        <%
+            // AI'nin ürettiği haftalık program günlere göre gruplanıyor;
+            // gün bilgisi olmayan (öğretmen ödevleri gibi) satırlar en sonda
+            // "Genel" başlığı altında gösteriliyor.
+            const GUN_SIRASI = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar', null];
+            const gunEtiketi = { Pazartesi: 'Pazartesi', Salı: 'Salı', Çarşamba: 'Çarşamba', Perşembe: 'Perşembe', Cuma: 'Cuma', Cumartesi: 'Cumartesi', Pazar: 'Pazar' };
         %>
-            <div class="card bg-dark border-secondary mb-2 <%= completed ? 'border-success' : '' %>">
-                <div class="card-body d-flex justify-content-between align-items-center py-2">
-                    <div class="form-check m-0">
-                        <input class="form-check-input hw-toggle" type="checkbox" data-id="<%= hw.id %>" id="hw-<%= hw.id %>" <%= completed ? 'checked' : '' %>>
-                        <label class="form-check-label <%= completed ? 'text-white-50 text-decoration-line-through' : 'text-white' %>" for="hw-<%= hw.id %>">
-                            <strong><%= hw.subject || 'Ders' %></strong> — <%= hw.exam_type || '' %><% if (hw.question_count) { %> <span class="badge bg-warning text-dark"><%= hw.question_count %> soru</span><% } %><% if (hw.source === 'ai') { %> <span class="badge bg-info text-dark"><i class="fas fa-brain"></i> AI Koç</span><% } %><br>
-                            <span class="text-secondary small"><%= topic %></span>
-                        </label>
+        <% GUN_SIRASI.forEach(gun => {
+            const gunOdevleri = homeworks.filter(hw => (hw.gun || null) === gun);
+            if (gunOdevleri.length === 0) return;
+        %>
+            <h6 class="text-secondary small text-uppercase mt-3 mb-2" style="letter-spacing:.05em;"><%= gun ? gunEtiketi[gun] : 'Genel' %></h6>
+            <% gunOdevleri.forEach(hw => {
+                const completed = hw.completed === true || hw.status === 'completed';
+                const topic = Array.isArray(hw.topics) ? hw.topics.join(', ') : (hw.topics || '');
+            %>
+                <div class="card bg-dark border-secondary mb-2 <%= completed ? 'border-success' : '' %>">
+                    <div class="card-body d-flex justify-content-between align-items-center py-2">
+                        <div class="form-check m-0">
+                            <input class="form-check-input hw-toggle" type="checkbox" data-id="<%= hw.id %>" id="hw-<%= hw.id %>" <%= completed ? 'checked' : '' %>>
+                            <label class="form-check-label <%= completed ? 'text-white-50 text-decoration-line-through' : 'text-white' %>" for="hw-<%= hw.id %>">
+                                <strong><%= hw.subject || 'Ders' %></strong> — <%= hw.exam_type || '' %><% if (hw.question_count) { %> <span class="badge bg-warning text-dark"><%= hw.question_count %> soru</span><% } %><% if (hw.source === 'ai') { %> <span class="badge bg-info text-dark"><i class="fas fa-brain"></i> AI Koç</span><% } %><br>
+                                <span class="text-secondary small"><%= topic %></span>
+                            </label>
+                        </div>
                     </div>
                 </div>
-            </div>
+            <% }) %>
         <% }) %>
     </main>
     <script>
+        async function konuDurumuKaydet(sifirdanBasla) {
+            const btn = document.getElementById('konuKaydetBtn');
+            const spinner = document.getElementById('konuKaydetSpinner');
+            btn.disabled = true;
+            if (!sifirdanBasla) spinner.classList.remove('d-none');
+
+            const tamamlanan = {};
+            document.querySelectorAll('.konu-check:checked').forEach(cb => {
+                const ders = cb.dataset.ders;
+                if (!tamamlanan[ders]) tamamlanan[ders] = [];
+                tamamlanan[ders].push(cb.value);
+            });
+
+            try {
+                const res = await fetch('/api/ai-koc/konu-durumu', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tamamlanan, sifirdanBasla })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Kaydedildi, ödev programın hazırlanıyor.', 'success');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    showToast(data.message || 'Kaydedilemedi.', 'error');
+                    btn.disabled = false;
+                    spinner.classList.add('d-none');
+                }
+            } catch (err) {
+                showToast('Bağlantı hatası oluştu, tekrar dene.', 'error');
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+            }
+        }
+
         const chatScroll = document.getElementById('chatScroll');
         chatScroll.scrollTop = chatScroll.scrollHeight;
 

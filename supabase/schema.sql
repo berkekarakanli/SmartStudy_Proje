@@ -54,17 +54,33 @@ create table public.profiles (
 
     kayit_tarihi timestamptz not null default now(),
 
-    -- AI Koç onboarding (Faz 2/3) - sınıfına/hedefine/kaynak sayısına göre
-    -- kişiselleştirilmiş çalışma programı üretebilmek için bir kere sorulur.
+    -- AI Koç onboarding (Faz 2/3) - sınıfına/hedefine göre kişiselleştirilmiş
+    -- çalışma programı üretebilmek için bir kere sorulur. (kaynak_sayilari
+    -- bilinçli olarak KALDIRILDI - ödevlendirme artık herkese eşit hacimde,
+    -- kaynağı az olan öğrenciye daha az soru verilmesi adaletsiz bulundu.)
     sinif text,
     ayt_alani text check (ayt_alani in ('SAY', 'EA', 'SOZ')),
     hedef text,
-    kaynak_sayilari jsonb default '{}'::jsonb,
     -- { dersAdi: [konu, konu, ...] } - sohbet sırasında öğrencinin "bunu
     -- zaten bitirdim" dediği konular; ödev planı bunları tekrar "öğren" diye
     -- vermez, sadece hata varsa pekiştirme olarak önerir.
     tamamlanan_konular jsonb default '{}'::jsonb,
-    ai_onboarding_tamamlandi boolean not null default false
+    -- { dersAdi: [konu, konu, ...] } - öğrencinin sohbette AÇIKÇA "bu konuda
+    -- yanlış yapıyorum/zorlanıyorum" dediği konular. Bir ders için net yüzdesi
+    -- çok yüksek olsa bile (örn. 120 üzerinden 119), AI Koç bunu "her şey
+    -- mükemmel" diye kabul etmeyip mutlaka spesifik konuyu sormalı - o cevap
+    -- burada tutulur ve ödev planında EN YÜKSEK öncelik burası olur.
+    zayif_konular jsonb default '{}'::jsonb,
+    -- "Hangi konuları bitirdin" sorusu artık sohbetle değil, sınıfı
+    -- belirlenince bir kerelik tik listesiyle soruluyor (serbest metinden
+    -- konu çıkarmak güvenilmez çıktı) - bu liste bir kez cevaplanınca true olur.
+    konu_durumu_soruldu boolean not null default false,
+    ai_onboarding_tamamlandi boolean not null default false,
+    -- Haftalık program döngüsü: hangi hafta numarasındayız ve en son ne zaman
+    -- yeni bir program üretildi - 7 günden fazla geçtiyse sohbette otomatik
+    -- olarak yeni bir haftalık program duyurulur.
+    hafta_no integer not null default 0,
+    haftalik_program_tarihi timestamptz
 );
 
 create index idx_profiles_referral_code on public.profiles(referral_code);
@@ -131,7 +147,15 @@ create table public.homeworks (
     date_assigned timestamptz not null default now(),
     status text not null default 'pending',
     completed boolean not null default false,
-    source text not null default 'teacher' check (source in ('teacher', 'ai'))
+    source text not null default 'teacher' check (source in ('teacher', 'ai')),
+    -- AI Koç'un haftalık program üretebilmesi için - "Pazartesi bu, Salı şu"
+    -- şeklinde günlere dağıtılmış görevler. Öğretmen ödevlerinde (source
+    -- ='teacher') kullanılmıyor, null kalıyor.
+    gun text check (gun in ('Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar')),
+    -- Hangi haftalık programa ait olduğu - AI Koç her hafta yeni bir program
+    -- üretince artıyor. Sadece son 2 haftanın AI ödevleri saklanıyor, 3.
+    -- program üretilince en eski hafta siliniyor.
+    hafta_no integer
 );
 
 create index idx_homeworks_teacher_id on public.homeworks(teacher_id);

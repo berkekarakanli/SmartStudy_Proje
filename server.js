@@ -1310,6 +1310,98 @@ app.get('/wrong-questions', requireLogin, async (req, res) => {
     }
 });
 
+const GECERLI_GUNLER = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+
+// AI Koç ödev planını üretip homeworks'e yazan ortak fonksiyon - hem sohbet
+// sırasında (sınıf/tamamlanan/zayıf konu değiştiğinde, sessizce) hem de
+// haftalık döngüde (yeniHafta:true, duyuru mesajıyla) kullanılıyor.
+//
+// yeniHafta:false -> mevcut haftanın (henüz tamamlanmamış) AI ödevlerini
+// güncel bilgiye göre sessizce değiştirir, duyuru YAPMAZ (sadece varsa
+// deneme_onerisi'ni proaktif mesaj olarak ekler).
+// yeniHafta:true -> hafta_no'yu bir artırır, yeni haftanın ödevlerini
+// oluşturur, en eski (yeni hafta_no - 2 ve öncesi) AI ödevlerini siler ve
+// haftalık programı okunabilir bir sohbet mesajı olarak duyurur.
+async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlananKonular, zayifKonular }, { yeniHafta }) {
+    const aytGerekli = sinif === '11' || sinif === '12' || sinif === 'Mezun';
+    const { sinavTuru, dersler: izinliMufredat } = getMufredat(sinif, aytGerekli ? aytAlani : undefined);
+    const examKey = sinavTuru === 'TYT+AYT' ? 'AYT' : sinavTuru;
+    const sinavTarihi = EXAM_DATES[examKey] || EXAM_DATES.TYT;
+    const kalanGun = Math.max(0, Math.ceil((new Date(sinavTarihi) - new Date()) / 86400000));
+
+    const { data: sonAnalizler } = await supabase.from('analizler').select('sinav_turu, detaylar, toplam_net, tarih').eq('user_id', userId).order('tarih', { ascending: false }).limit(5);
+    const { data: hataKayitlari } = await supabase.from('wrong_questions').select('subject').eq('user_id', userId).not('subject', 'is', null);
+    const hataDefteriDersSayilari = {};
+    (hataKayitlari || []).forEach(h => { hataDefteriDersSayilari[h.subject] = (hataDefteriDersSayilari[h.subject] || 0) + 1; });
+
+    const plan = await generateHomeworkPlan({
+        sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular,
+        izinliMufredat, sinavTarihi, kalanGun, sonAnalizler: sonAnalizler || [], hataDefteriDersSayilari
+    });
+    if (!plan || !Array.isArray(plan.odevler)) return;
+
+    const { data: mevcutProfil } = await supabase.from('profiles').select('hafta_no').eq('id', userId).single();
+    const suankiHafta = mevcutProfil?.hafta_no || 0;
+    const hedefHaftaNo = yeniHafta ? suankiHafta + 1 : Math.max(suankiHafta, 1);
+
+    // Modelin uydurma bir ders adı yazması ya da farklı derslerin konularını
+    // tek satırda karıştırması ihtimaline karşı - sadece GERÇEKTEN o dersin
+    // müfredatında olan konuları kabul ediyoruz (flattened bir set değil,
+    // o dersin KENDİ konu listesiyle eşleştiriyoruz).
+    const temelSatirlar = plan.odevler
+        .filter(o => o && typeof o.ders === 'string' && Array.isArray(o.konular) && Array.isArray(izinliMufredat[o.ders]))
+        .map(o => {
+            const dersKonulari = new Set(izinliMufredat[o.ders]);
+            return {
+                teacher_id: null, student_id: userId, exam_type: sinavTuru, subject: o.ders,
+                topics: o.konular.filter(k => dersKonulari.has(k)),
+                question_count: Number.isFinite(Number(o.soru_sayisi)) ? Math.min(60, Math.max(1, Math.round(Number(o.soru_sayisi)))) : 10,
+                date_assigned: new Date().toISOString(), status: 'pending', completed: false, source: 'ai',
+                gun: o.gun, hafta_no: hedefHaftaNo
+            };
+        })
+        .filter(o => o.topics.length > 0);
+    const satirlar = temelSatirlar.flatMap(o => o.gun === 'Her gün'
+        ? GECERLI_GUNLER.map(gun => ({ ...o, gun }))
+        : [{ ...o, gun: GECERLI_GUNLER.includes(o.gun) ? o.gun : null }]);
+
+    if (yeniHafta) {
+        // Sadece son 2 haftayı sakla - 3. program üretilince en eskisi silinir.
+        await supabase.from('homeworks').delete().eq('student_id', userId).eq('source', 'ai').lte('hafta_no', hedefHaftaNo - 2);
+    }
+    // Bu haftanın tamamlanmamış eski AI ödevlerini temizleyip yenisini
+    // ekliyoruz - tamamlanmış (completed=true) olanlara dokunulmuyor.
+    await supabase.from('homeworks').delete().eq('student_id', userId).eq('source', 'ai').eq('hafta_no', hedefHaftaNo).eq('completed', false);
+    if (satirlar.length > 0) {
+        await supabase.from('homeworks').insert(satirlar);
+    }
+
+    // haftalik_program_tarihi SADECE gerçekten yeni bir hafta duyurulduğunda
+    // güncellenir - sessiz (yeniHafta:false) güncellemede bu tarihe
+    // dokunulmazsa, 7 günlük döngü sessiz güncellemelerle sürekli
+    // sıfırlanmaz.
+    const profilGuncelleme = { hafta_no: hedefHaftaNo };
+    if (yeniHafta) profilGuncelleme.haftalik_program_tarihi = new Date().toISOString();
+    await supabase.from('profiles').update(profilGuncelleme).eq('id', userId);
+
+    if (yeniHafta) {
+        const gunGruplari = GECERLI_GUNLER.map(gun => {
+            const oGun = satirlar.filter(s => s.gun === gun);
+            if (oGun.length === 0) return null;
+            const satirMetni = oGun.map(s => `${s.subject} (${s.topics.join(', ')}) - ${s.question_count} soru`).join('; ');
+            return `${gun}: ${satirMetni}`;
+        }).filter(Boolean).join('\n');
+
+        let duyuru = `📅 ${hedefHaftaNo}. hafta programın hazır:\n${gunGruplari || 'Bu hafta için özel bir görev önerilmedi, mevcut ödevlerine devam et.'}`;
+        if (plan.deneme_onerisi) duyuru += `\n\n${plan.deneme_onerisi}`;
+        duyuru += '\n\nBu program sana uygun mu? Değiştirmemi istediğin bir şey varsa söyle.';
+
+        await supabase.from('ai_mesajlar').insert({ user_id: userId, rol: 'ai', mesaj: duyuru, okunmadi: true });
+    } else if (plan.deneme_onerisi && typeof plan.deneme_onerisi === 'string' && plan.deneme_onerisi.trim()) {
+        await supabase.from('ai_mesajlar').insert({ user_id: userId, rol: 'ai', mesaj: plan.deneme_onerisi.trim(), okunmadi: true });
+    }
+}
+
 // ==========================================
 // 8c. ÖĞRENCİ: KOÇUM & ÖDEVLERİM - Web / Bootstrap
 // Flutter'daki "Öğrenci-Koç" ekranının web panelindeki karşılığı.
@@ -1336,16 +1428,76 @@ app.get('/student-coach', requireLogin, async (req, res) => {
             if (yeniMesaj) mesajlar = [yeniMesaj];
         }
 
-        res.render('student-coach', { user, homeworks: homeworks || [], kocListesi, mesajlar });
+        // Sınıf biliniyor ama konu durumu (hangi konuları bitirdi) henüz
+        // sorulmadıysa, sohbet ekranında bir kerelik tik listesi gösteriliyor
+        // - bu artık sohbetten değil buradan alınıyor (serbest metinden çok
+        // konu çıkarmak güvenilmez çıktı, bir mesajda birkaç bilgi verilince
+        // model bazen birini atlıyordu).
+        let konuDurumuMufredat = null;
+        if (user.sinif && !user.konu_durumu_soruldu) {
+            const aytGerekli = user.sinif === '11' || user.sinif === '12' || user.sinif === 'Mezun';
+            konuDurumuMufredat = getMufredat(user.sinif, aytGerekli ? user.ayt_alani : undefined).dersler;
+        }
+
+        res.render('student-coach', { user, homeworks: homeworks || [], kocListesi, mesajlar, konuDurumuMufredat });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Koç bilgisi yüklenirken sorun oluştu.', '/dashboard'));
     }
 });
 
+// Konu durumu tik listesi - sınıf belirlenince bir kez sorulur, sohbetin
+// yerine geçer (bkz. /student-coach route'undaki not). "sifirdanBasla: true"
+// gelirse hiçbir konu tamamlanan_konular'a eklenmez, sadece soru bir daha
+// sorulmasın diye konu_durumu_soruldu true yapılır.
+app.post('/api/ai-koc/konu-durumu', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+        if (!user.sinif) return res.status(400).json({ success: false, message: 'Önce sınıfını sohbette belirtmelisin.' });
+
+        const aytGerekli = user.sinif === '11' || user.sinif === '12' || user.sinif === 'Mezun';
+        const izinliMufredat = getMufredat(user.sinif, aytGerekli ? user.ayt_alani : undefined).dersler;
+
+        const tamamlanan = {};
+        if (!req.body.sifirdanBasla) {
+            const gelenTamamlanan = req.body.tamamlanan && typeof req.body.tamamlanan === 'object' ? req.body.tamamlanan : {};
+            Object.entries(gelenTamamlanan).forEach(([ders, konular]) => {
+                if (!Array.isArray(izinliMufredat[ders]) || !Array.isArray(konular)) return;
+                const izinliKonular = new Set(izinliMufredat[ders]);
+                const secilenler = konular.filter(k => typeof k === 'string' && izinliKonular.has(k));
+                if (secilenler.length > 0) tamamlanan[ders] = secilenler;
+            });
+        }
+
+        await supabase.from('profiles').update({
+            tamamlanan_konular: tamamlanan,
+            konu_durumu_soruldu: true
+        }).eq('id', user.id);
+
+        res.json({ success: true });
+
+        // İlk haftalık program hemen üretilip duyurulsun - kullanıcı tik
+        // listesini doldurup gönderdiğinde beklemeden programını görsün.
+        (async () => {
+            try {
+                await odevPlaniUretVeUygula(user.id, {
+                    sinif: user.sinif, aytAlani: user.ayt_alani, hedef: user.hedef,
+                    tamamlananKonular: tamamlanan, zayifKonular: user.zayif_konular || {}
+                }, { yeniHafta: true });
+            } catch (planError) {
+                console.error('[AI Koç] Konu durumu sonrası ödev planı oluşturulamadı:', planError?.message || planError);
+            }
+        })();
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
+    }
+});
+
 // AI Koç V2 - gerçek sohbet ucu. Kullanıcı mesajını kaydeder, Gemini'den
 // hem doğal bir cevap hem de o mesajdan çıkarılabilecek yapılandırılmış
-// profil güncellemesini (sınıf/hedef/kaynak/tamamlanan konu) tek seferde
+// profil güncellemesini (sınıf/hedef/tamamlanan konu) tek seferde
 // alır, profili günceller ve gerekiyorsa ödev planını arka planda yeniler.
 app.post('/api/ai-koc/mesaj-gonder', requireLogin, async (req, res) => {
     try {
@@ -1381,7 +1533,7 @@ app.post('/api/ai-koc/mesaj-gonder', requireLogin, async (req, res) => {
 
         const sonuc = await generateChatReply({
             mesajGecmisi,
-            profil: { sinif: user.sinif, ayt_alani: user.ayt_alani, hedef: user.hedef, kaynak_sayilari: user.kaynak_sayilari, tamamlanan_konular: user.tamamlanan_konular },
+            profil: { sinif: user.sinif, ayt_alani: user.ayt_alani, hedef: user.hedef, tamamlanan_konular: user.tamamlanan_konular, zayif_konular: user.zayif_konular },
             sonAnalizler: sonAnalizler || [],
             hataDefteriDersSayilari,
             izinliMufredat
@@ -1393,7 +1545,7 @@ app.post('/api/ai-koc/mesaj-gonder', requireLogin, async (req, res) => {
 
         await supabase.from('ai_mesajlar').insert({ user_id: user.id, rol: 'ai', mesaj: sonuc.cevap, okunmadi: false });
 
-        // Profil güncellemelerini uygula (varsa) - mevcut kaynak/tamamlanan
+        // Profil güncellemelerini uygula (varsa) - mevcut tamamlanan/zayıf
         // konu verisiyle MERGE edilir, üzerine yazılmaz.
         const g = sonuc.guncellemeler || {};
         const guncelleme = {};
@@ -1404,15 +1556,7 @@ app.post('/api/ai-koc/mesaj-gonder', requireLogin, async (req, res) => {
         }
         if (g.ayt_alani && GECERLI_AYT_ALANLARI.includes(g.ayt_alani)) guncelleme.ayt_alani = g.ayt_alani;
         if (g.hedef && typeof g.hedef === 'string') guncelleme.hedef = g.hedef.slice(0, 200);
-        let kaynakDegisti = false, tamamlananDegisti = false;
-        if (g.kaynak_guncellemeleri && typeof g.kaynak_guncellemeleri === 'object' && Object.keys(g.kaynak_guncellemeleri).length > 0) {
-            const yeniKaynak = { ...(user.kaynak_sayilari || {}) };
-            Object.entries(g.kaynak_guncellemeleri).forEach(([ders, sayi]) => {
-                const n = Number.parseInt(sayi, 10);
-                if (Number.isFinite(n) && n >= 0 && n <= 20) { yeniKaynak[ders] = n; kaynakDegisti = true; }
-            });
-            if (kaynakDegisti) guncelleme.kaynak_sayilari = yeniKaynak;
-        }
+        let tamamlananDegisti = false;
         if (g.tamamlanan_konu_eklemeleri && typeof g.tamamlanan_konu_eklemeleri === 'object' && Object.keys(g.tamamlanan_konu_eklemeleri).length > 0) {
             const yeniTamamlanan = { ...(user.tamamlanan_konular || {}) };
             Object.entries(g.tamamlanan_konu_eklemeleri).forEach(([ders, konular]) => {
@@ -1424,6 +1568,18 @@ app.post('/api/ai-koc/mesaj-gonder', requireLogin, async (req, res) => {
             });
             if (tamamlananDegisti) guncelleme.tamamlanan_konular = yeniTamamlanan;
         }
+        let zayifDegisti = false;
+        if (g.zayif_konu_eklemeleri && typeof g.zayif_konu_eklemeleri === 'object' && Object.keys(g.zayif_konu_eklemeleri).length > 0) {
+            const yeniZayif = { ...(user.zayif_konular || {}) };
+            Object.entries(g.zayif_konu_eklemeleri).forEach(([ders, konular]) => {
+                if (!Array.isArray(konular)) return;
+                const mevcut = new Set(yeniZayif[ders] || []);
+                konular.forEach(k => { if (typeof k === 'string') mevcut.add(k); });
+                yeniZayif[ders] = Array.from(mevcut);
+                zayifDegisti = true;
+            });
+            if (zayifDegisti) guncelleme.zayif_konular = yeniZayif;
+        }
         if (Object.keys(guncelleme).length > 0) {
             if (guncelleme.sinif) guncelleme.ai_onboarding_tamamlandi = true;
             await supabase.from('profiles').update(guncelleme).eq('id', user.id);
@@ -1431,55 +1587,47 @@ app.post('/api/ai-koc/mesaj-gonder', requireLogin, async (req, res) => {
 
         res.json({ success: true, cevap: sonuc.cevap });
 
-        // Ödev planı arka planda yenilenir (kullanıcıyı beklet meden) -
-        // sadece sınıf ilk kez öğrenildiyse ya da kaynak/tamamlanan konu
-        // değiştiyse tetiklenir. Sınıf hâlâ bilinmiyorsa hiç tetiklenmez -
+        // Sınıf hâlâ bilinmiyorsa hiçbir ödev planı tetiklenmez -
         // "bilinmiyorsa TYT varsay" gibi riskli bir tahmine güvenmiyoruz.
         const guncelSinifKontrol = guncelleme.sinif || user.sinif;
-        if ((sinifYeniOgrenildi || kaynakDegisti || tamamlananDegisti) && guncelSinifKontrol) {
-            const guncelSinif = guncelSinifKontrol;
-            const guncelAytAlani = guncelleme.ayt_alani || user.ayt_alani;
-            const guncelKaynak = guncelleme.kaynak_sayilari || user.kaynak_sayilari || {};
-            const guncelTamamlanan = guncelleme.tamamlanan_konular || user.tamamlanan_konular || {};
-            const guncelHedef = guncelleme.hedef || user.hedef;
-            (async () => {
-                try {
-                    const yineAytGerektirir = guncelSinif === '11' || guncelSinif === '12' || guncelSinif === 'Mezun';
-                    const { sinavTuru, dersler: izinliMufredat2 } = getMufredat(guncelSinif, yineAytGerektirir ? guncelAytAlani : undefined);
-                    const examKey = sinavTuru === 'TYT+AYT' ? 'AYT' : sinavTuru;
-                    const sinavTarihi = EXAM_DATES[examKey] || EXAM_DATES.TYT;
-                    const kalanGun = Math.max(0, Math.ceil((new Date(sinavTarihi) - new Date()) / 86400000));
+        if (guncelSinifKontrol) {
+            const ortakProfil = {
+                sinif: guncelSinifKontrol,
+                aytAlani: guncelleme.ayt_alani || user.ayt_alani,
+                hedef: guncelleme.hedef || user.hedef,
+                tamamlananKonular: guncelleme.tamamlanan_konular || user.tamamlanan_konular || {},
+                zayifKonular: guncelleme.zayif_konular || user.zayif_konular || {}
+            };
 
-                    const plan = await generateHomeworkPlan({
-                        sinif: guncelSinif, sinavTuru, aytAlani: guncelAytAlani, hedef: guncelHedef,
-                        kaynakSayilari: guncelKaynak, tamamlananKonular: guncelTamamlanan,
-                        izinliMufredat: izinliMufredat2, sinavTarihi, kalanGun,
-                        sonAnalizler: sonAnalizler || [], hataDefteriDersSayilari
-                    });
+            // Haftalık döngü: son programın üzerinden 7 günden fazla geçtiyse
+            // (ya da hiç program üretilmediyse, örn. ilk kez sınıf öğrenildi)
+            // yeni bir hafta duyurulur - bu durumda AŞAĞIDAKİ sessiz güncelleme
+            // ÇALIŞTIRILMAZ (ikisi aynı anda tetiklenirse hafta_no üzerinde
+            // yarış durumu/çakışma olur) - haftalık program zaten en güncel
+            // veriyle üretildiği için sessiz güncellemeye gerek kalmaz.
+            const sonProgramTarihi = user.haftalik_program_tarihi ? new Date(user.haftalik_program_tarihi).getTime() : 0;
+            const yediGunGecti = Date.now() - sonProgramTarihi > 7 * 86400000;
 
-                    if (plan && Array.isArray(plan.odevler)) {
-                        const izinliKonular = new Set(Object.values(izinliMufredat2).flat());
-                        const satirlar = plan.odevler
-                            .filter(o => o && typeof o.ders === 'string' && Array.isArray(o.konular))
-                            .map(o => ({
-                                teacher_id: null, student_id: user.id, exam_type: sinavTuru, subject: o.ders,
-                                topics: o.konular.filter(k => izinliKonular.has(k)),
-                                question_count: Number.isFinite(Number(o.soru_sayisi)) ? Math.min(60, Math.max(1, Math.round(Number(o.soru_sayisi)))) : 10,
-                                date_assigned: new Date().toISOString(), status: 'pending', completed: false, source: 'ai'
-                            }))
-                            .filter(o => o.topics.length > 0);
-
-                        if (satirlar.length > 0) {
-                            // Tamamlanmamış eski AI ödevlerini temizleyip yenisini
-                            // ekliyoruz - tamamlanmış (completed=true) olanlara dokunulmuyor.
-                            await supabase.from('homeworks').delete().eq('student_id', user.id).eq('source', 'ai').eq('completed', false);
-                            await supabase.from('homeworks').insert(satirlar);
-                        }
+            if (yediGunGecti) {
+                (async () => {
+                    try {
+                        await odevPlaniUretVeUygula(user.id, ortakProfil, { yeniHafta: true });
+                    } catch (planError) {
+                        console.error('[AI Koç] Haftalık program oluşturulamadı:', planError?.message || planError);
                     }
-                } catch (planError) {
-                    console.error('[AI Koç] Ödev planı oluşturulamadı:', planError?.message || planError);
-                }
-            })();
+                })();
+            } else if (sinifYeniOgrenildi || tamamlananDegisti || zayifDegisti) {
+                // Sınıf yeni öğrenildiyse ya da tamamlanan/zayıf konu değiştiyse
+                // (ve haftalık döngü henüz tetiklenmediyse) mevcut haftanın
+                // ödevleri sessizce (duyuru yapmadan) güncellenir.
+                (async () => {
+                    try {
+                        await odevPlaniUretVeUygula(user.id, ortakProfil, { yeniHafta: false });
+                    } catch (planError) {
+                        console.error('[AI Koç] Ödev planı oluşturulamadı:', planError?.message || planError);
+                    }
+                })();
+            }
         }
     } catch (error) {
         console.error(error);
@@ -2232,7 +2380,7 @@ function adminShell(activeTab, bodyHtml, stats) {
 app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
     try {
         const [{ data: profiles }, { data: analizler }, { data: wrongQs }] = await Promise.all([
-            supabase.from('profiles').select('id, ad, email, role, level, kayit_tarihi, sinif, ayt_alani, hedef, kaynak_sayilari, tamamlanan_konular').order('kayit_tarihi', { ascending: false }),
+            supabase.from('profiles').select('id, ad, email, role, level, kayit_tarihi, sinif, ayt_alani, hedef, tamamlanan_konular, zayif_konular').order('kayit_tarihi', { ascending: false }),
             supabase.from('analizler').select('user_id'),
             supabase.from('wrong_questions').select('user_id')
         ]);
@@ -2249,7 +2397,7 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
             // için - Supabase Table Editor'e girmeden hızlı destek/debug.
             const aiKocDetay = {
                 sinif: p.sinif || null, ayt_alani: p.ayt_alani || null, hedef: p.hedef || null,
-                kaynak_sayilari: p.kaynak_sayilari || {}, tamamlanan_konular: p.tamamlanan_konular || {}
+                tamamlanan_konular: p.tamamlanan_konular || {}, zayif_konular: p.zayif_konular || {}
             };
             const aiKocTitle = escapeHtml(JSON.stringify(aiKocDetay, null, 1));
             return `
