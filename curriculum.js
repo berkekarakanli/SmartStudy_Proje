@@ -20,6 +20,58 @@ const EXAM_DATES = {
     KPSS: '2027-07-11'
 };
 
+// Net analizi kaydında her ders için izin verilen MAKSİMUM soru sayısı -
+// backend/public/analysis.html'deki `studentExamData` ile AYNI değerler
+// (ÖSYM'nin gerçek soru sayıları). Sunucu tarafında bir öğrenci bir derse
+// bu maksimumun üzerinde net girmeye çalışırsa reddetmek için kullanılır -
+// eskiden bu kontrol hiç yoktu, istemci tarafı da göstermelik bir "Max: X"
+// etiketiydi ama hiçbir yerde gerçekten uygulanmıyordu.
+const NET_ALANLARI = {
+    TYT: [
+        { id: 'mat', label: 'Matematik', max: 40 },
+        { id: 'turkce', label: 'Türkçe', max: 40 },
+        { id: 'fen', label: 'Fen Bilimleri', max: 20 },
+        { id: 'sosyal', label: 'Sosyal Bilimler', max: 20 }
+    ],
+    AYT_SAY: [
+        { id: 'mat', label: 'Matematik', max: 40 },
+        { id: 'fizik', label: 'Fizik', max: 14 },
+        { id: 'kimya', label: 'Kimya', max: 13 },
+        { id: 'biyoloji', label: 'Biyoloji', max: 13 }
+    ],
+    AYT_EA: [
+        { id: 'mat', label: 'Matematik', max: 40 },
+        { id: 'edebiyat', label: 'Türkçe / Edebiyat', max: 24 },
+        { id: 'tarih1', label: 'Tarih-1', max: 10 },
+        { id: 'cografya1', label: 'Coğrafya-1', max: 6 }
+    ],
+    AYT_SOZ: [
+        { id: 'edebiyat', label: 'Türkçe / Edebiyat', max: 24 },
+        { id: 'tarih1', label: 'Tarih-1', max: 10 },
+        { id: 'cografya1', label: 'Coğrafya-1', max: 6 },
+        { id: 'tarih2', label: 'Tarih-2', max: 11 },
+        { id: 'cografya2', label: 'Coğrafya-2', max: 11 },
+        { id: 'felsefe', label: 'Felsefe Grubu', max: 12 },
+        { id: 'din', label: 'Din/Felsefe', max: 6 }
+    ],
+    KPSS: [
+        { id: 'k_turkce', label: 'Türkçe', max: 30 },
+        { id: 'k_mat', label: 'Matematik', max: 30 },
+        { id: 'k_tarih', label: 'Tarih', max: 27 },
+        { id: 'k_cografya', label: 'Coğrafya', max: 18 },
+        { id: 'k_vat', label: 'Vatandaşlık', max: 9 },
+        { id: 'k_guncel', label: 'Güncel Olaylar', max: 6 }
+    ],
+    LGS: [
+        { id: 'l_turkce', label: 'Türkçe', max: 20 },
+        { id: 'l_mat', label: 'Matematik', max: 20 },
+        { id: 'l_fen', label: 'Fen Bilimleri', max: 20 },
+        { id: 'l_inkilap', label: 'İnkılap Tarihi', max: 10 },
+        { id: 'l_din', label: 'Din Kültürü', max: 10 },
+        { id: 'l_ingilizce', label: 'İngilizce', max: 10 }
+    ]
+};
+
 const SYLLABUS = {
     TYT: {
         'Türkçe / Türk Dili ve Edebiyatı': [
@@ -277,4 +329,4 @@ function getKaynakDersleri(sinif, aytAlani) {
     return Object.keys(getMufredat(sinif, aytAlani).dersler);
 }
 
-module.exports = { EXAM_DATES, SYLLABUS, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getKaynakDersleri };
+module.exports = { EXAM_DATES, SYLLABUS, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getKaynakDersleri };

@@ -12,7 +12,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const ejs = require('ejs');
 const { readNetFromOpticImage, generateNetAnalysis, generateHomeworkPlan } = require('./geminiService');
-const { EXAM_DATES, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getKaynakDersleri } = require('./curriculum');
+const { EXAM_DATES, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getKaynakDersleri } = require('./curriculum');
 
 const app = express();
 
@@ -1680,6 +1680,26 @@ app.post('/generate-plan', requireUser, async (req, res) => {
         const detaylar = {};
         const sinav_turu = req.body.sinav_turu || 'TYT';
         const hedef_net = req.body.hedef ? Number(req.body.hedef) : null;
+
+        // Her dersin ÖSYM'nin belirlediği gerçek soru sayısını (max) aşmadığını
+        // sunucu tarafında doğruluyoruz - eskiden bu kontrol hiç yoktu, istemci
+        // tarafındaki "Max: X" etiketi sadece görselti, hiçbir yerde
+        // uygulanmıyordu; biri 40 netlik bir derse 999 net girip
+        // kaydedebiliyordu (Şöhretler Salonu/istatistikleri bozacak şekilde).
+        const alanlar = NET_ALANLARI[sinav_turu];
+        if (!alanlar) {
+            if (wantsJson(req)) return res.status(400).json({ success: false, message: 'Geçersiz sınav türü.' });
+            return res.status(400).send(errorPage('Hata', 'Geçersiz sınav türü.', '/plan'));
+        }
+        for (const alan of alanlar) {
+            const ham = req.body[alan.id];
+            const sayi = Number(ham);
+            if (ham !== undefined && ham !== '' && (!Number.isFinite(sayi) || sayi < 0 || sayi > alan.max)) {
+                const mesaj = alan.label + ' için net değeri 0 ile ' + alan.max + ' arasında olmalı.';
+                if (wantsJson(req)) return res.status(400).json({ success: false, message: mesaj });
+                return res.status(400).send(errorPage('Geçersiz Değer', mesaj, '/plan'));
+            }
+        }
 
         for (const [key, value] of Object.entries(req.body)) {
             if (!['sinav_turu', 'role', 'hedef', 'userId', 'is_ai_request'].includes(key)) {

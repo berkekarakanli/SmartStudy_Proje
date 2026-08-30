@@ -446,6 +446,19 @@
             updateExamUI();
 
             window.submitAnalysis = async function () {
+                const fields = studentExamData[activeKey()] || [];
+                const inputs = document.querySelectorAll('#netGrid input');
+                for (const inp of inputs) {
+                    const field = fields.find(f => f.id === inp.dataset.field);
+                    const val = Number(inp.value || '0');
+                    if (!field) continue;
+                    if (!Number.isFinite(val) || val < 0 || val > field.max) {
+                        showToast(field.label + ' için net değeri 0 ile ' + field.max + ' arasında olmalı.', 'error');
+                        inp.focus();
+                        return;
+                    }
+                }
+
                 const spinner = document.getElementById('saveSpinner');
                 spinner.classList.remove('d-none');
 
