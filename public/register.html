@@ -361,7 +361,16 @@
                 <label class="form-label">Analiz Anahtarı (Şifre)</label>
                 <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                    <input type="password" name="sifre" id="sifre" class="form-control space-input" placeholder="••••••••" required>
+                    <input type="password" name="sifre" id="sifre" class="form-control space-input" placeholder="••••••••" minlength="8" required>
+                </div>
+            </div>
+
+            <!-- ŞİFRE TEKRAR -->
+            <div class="mb-3">
+                <label class="form-label">Şifre Tekrar</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                    <input type="password" name="sifreTekrar" id="sifreTekrar" class="form-control space-input" placeholder="••••••••" minlength="8" required>
                 </div>
             </div>
 
@@ -522,14 +531,29 @@
             const ad = document.getElementById("ad").value;
             const email = document.getElementById("email").value;
             const pass = document.getElementById("sifre").value;
+            const passTekrar = document.getElementById("sifreTekrar").value;
+            // Basit ama yeterli bir e-posta format kontrolü - tarayıcının
+            // type="email" doğrulaması otomatik olarak kaçırdığı bazı
+            // geçersiz adresleri (boşluk, eksik uzantı vb.) burada yakalıyoruz.
+            const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
             if (ad.trim().length < 2) {
                 showToast("Hata: Geçerli bir isim giriniz.", "error");
                 return false;
             }
 
-            if (pass.length < 6) {
-                showToast("Hata: Analiz anahtarı (şifre) en az 6 karakter olmalıdır.", "error");
+            if (!emailPattern.test(email.trim())) {
+                showToast("Hata: Geçerli bir e-posta adresi giriniz.", "error");
+                return false;
+            }
+
+            if (pass.length < 8) {
+                showToast("Hata: Analiz anahtarı (şifre) en az 8 karakter olmalıdır.", "error");
+                return false;
+            }
+
+            if (pass !== passTekrar) {
+                showToast("Hata: Şifreler birbiriyle eşleşmiyor.", "error");
                 return false;
             }
 

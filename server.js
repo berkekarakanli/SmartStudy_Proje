@@ -472,8 +472,11 @@ app.post('/register', registerLimiter, async (req, res) => {
         const sifre = String(req.body.sifre || '');
         const role = req.body.role === 'teacher' ? 'teacher' : 'student';
 
-        if (!ad || !email || sifre.length < 6) {
-            const msg = 'Tüm alanları doğru doldurun.';
+        // İstemci tarafı (JS) doğrulaması atlanabildiği için (curl, geliştirici
+        // araçları vb.) aynı kontrolleri burada, sunucu tarafında da yapıyoruz.
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!ad || ad.length < 2 || !email || !emailPattern.test(email) || sifre.length < 8) {
+            const msg = 'Tüm alanları doğru doldurun (isim en az 2 karakter, geçerli bir e-posta, şifre en az 8 karakter olmalı).';
             if (wantsJson(req)) return res.status(400).json({ success: false, message: msg });
             return res.status(400).send(errorPage('Kayıt Hatası', msg, '/register'));
         }
@@ -516,7 +519,7 @@ app.post('/register', registerLimiter, async (req, res) => {
         // kullanıyoruz (anon anahtarlı supabaseAuthClient üzerinden) - sadece
         // signUp(), Supabase'in Authentication > Emails kısmında ayarladığımız
         // "Confirm sign up" e-postasını OTOMATİK gönderiyor. admin.createUser()
-        // bunu tetiklemiyor. E-posta artık bir LİNK değil, 6 haneli bir KOD
+        // bunu tetiklemiyor. E-posta artık bir LİNK değil, 8 haneli bir KOD
         // içeriyor (Supabase şablonundaki {{ .Token }} değişkeni) -
         // kullanıcı bu kodu /verify-email sayfasına yazıyor.
         const { data: authData, error: authError } = await supabaseAuthClient.auth.signUp({
@@ -568,7 +571,7 @@ app.post('/register', registerLimiter, async (req, res) => {
                 id: newUserId,
                 role,
                 emailConfirmationRequired: true,
-                message: `${email} adresine 6 haneli bir doğrulama kodu gönderdik. Giriş yapmadan önce e-postanı doğrulaman gerekiyor.`
+                message: `${email} adresine 8 haneli bir doğrulama kodu gönderdik. Giriş yapmadan önce e-postanı doğrulaman gerekiyor.`
             });
         }
         res.redirect('/verify-email?email=' + encodeURIComponent(email));
@@ -595,11 +598,11 @@ function verifyEmailForm(email, message, isError) {
     <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
         <main class="text-center p-4" style="max-width: 420px; width: 100%;">
             <h1 class="h3 mb-3">E-Postanı Doğrula</h1>
-            <p class="text-white-50">${escapeHtml(email)} adresine gönderdiğimiz 6 haneli kodu gir.</p>
+            <p class="text-white-50">${escapeHtml(email)} adresine gönderdiğimiz 8 haneli kodu gir.</p>
             ${message ? `<div class="alert ${isError ? 'alert-warning' : 'alert-info'}">${escapeHtml(message)}</div>` : ''}
             <form method="POST" action="/verify-email" class="d-flex flex-column gap-2">
                 <input type="hidden" name="email" value="${escapeHtml(email)}">
-                <input type="text" name="code" class="form-control text-center" placeholder="6 haneli kod" inputmode="numeric" maxlength="6" required autofocus>
+                <input type="text" name="code" class="form-control text-center" placeholder="8 haneli kod" inputmode="numeric" maxlength="8" required autofocus>
                 <button type="submit" class="btn btn-info text-dark fw-bold">Doğrula</button>
             </form>
             <a class="btn btn-outline-secondary mt-3" href="/login">Giriş Sayfasına Dön</a>
@@ -635,6 +638,10 @@ app.post('/login', loginLimiter, async (req, res) => {
         const sifre = String(req.body.sifre || '');
         const requestedRole = req.body.requestedRole;
 
+        if (!email || !sifre) {
+            return res.status(400).json({ success: false, message: 'E-posta ve şifre gerekli.' });
+        }
+
         // Şifre doğrulaması artık Supabase Auth'ta yapılıyor - kendi
         // pbkdf2/hashPassword mantığımıza hiç gerek kalmadı. E-postasını
         // henüz doğrulamamış kullanıcılar için Supabase kendi tarafında
@@ -645,7 +652,7 @@ app.post('/login', loginLimiter, async (req, res) => {
             if (signInError && /email.*not.*confirmed/i.test(signInError.message || '')) {
                 return res.status(403).json({
                     success: false,
-                    message: 'E-postanı henüz doğrulamadın. Kayıt olurken gönderdiğimiz bağlantıya tıklamadan giriş yapamazsın.',
+                    message: 'E-postanı henüz doğrulamadın. Kayıt olurken gönderdiğimiz kodu girmeden giriş yapamazsın.',
                     emailNotConfirmed: true
                 });
             }
@@ -696,7 +703,7 @@ app.post('/login', loginLimiter, async (req, res) => {
 // yönlendirmesi) Site URL / Redirect URLs ayarlarına bağımlı olduğu ve
 // bu ayarların doğru olmadığı durumlarda kullanıcıyı yanlış yere (hatta
 // localhost'a) göndermeye çok açık olduğu için, bunun yerine kullanıcının
-// e-postasına gelen 6 haneli kodu doğrudan bu sayfaya yazdığı bir akış
+// e-postasına gelen 8 haneli kodu doğrudan bu sayfaya yazdığı bir akış
 // kullanıyoruz - hiçbir yönlendirmeye ihtiyaç yok, tamamen bu sunucudan
 // yönetiliyor.
 function forgotPasswordForm(message) {
@@ -711,7 +718,7 @@ function forgotPasswordForm(message) {
     <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
         <main class="text-center p-4" style="max-width: 420px;">
             <h1 class="h3 mb-3">Şifremi Unuttum</h1>
-            <p class="text-white-50">Kayıtlı e-posta adresini gir, sana 6 haneli bir doğrulama kodu gönderelim.</p>
+            <p class="text-white-50">Kayıtlı e-posta adresini gir, sana 8 haneli bir doğrulama kodu gönderelim.</p>
             ${message ? `<div class="alert alert-info">${escapeHtml(message)}</div>` : ''}
             <form method="POST" action="/forgot-password" class="d-flex flex-column gap-2">
                 <input type="email" name="email" class="form-control" placeholder="E-posta adresin" required>
@@ -755,12 +762,12 @@ function resetPasswordForm(email, message, isError) {
     <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
         <main class="text-center p-4" style="max-width: 420px; width: 100%;">
             <h1 class="h3 mb-3">Yeni Şifre Belirle</h1>
-            <p class="text-white-50">${escapeHtml(email)} adresine gönderdiğimiz 6 haneli kodu ve yeni şifreni gir.</p>
+            <p class="text-white-50">${escapeHtml(email)} adresine gönderdiğimiz 8 haneli kodu ve yeni şifreni gir.</p>
             ${message ? `<div class="alert ${isError ? 'alert-warning' : 'alert-info'}">${escapeHtml(message)}</div>` : ''}
             <form method="POST" action="/reset-password" class="d-flex flex-column gap-2">
                 <input type="hidden" name="email" value="${escapeHtml(email)}">
-                <input type="text" name="code" class="form-control text-center" placeholder="6 haneli kod" inputmode="numeric" maxlength="6" required autofocus>
-                <input type="password" name="newPassword" class="form-control" placeholder="Yeni şifre (en az 6 karakter)" minlength="6" required>
+                <input type="text" name="code" class="form-control text-center" placeholder="8 haneli kod" inputmode="numeric" maxlength="8" required autofocus>
+                <input type="password" name="newPassword" class="form-control" placeholder="Yeni şifre (en az 8 karakter)" minlength="8" required>
                 <button type="submit" class="btn btn-info text-dark fw-bold">Şifreyi Güncelle</button>
             </form>
             <a class="btn btn-outline-secondary mt-3" href="/forgot-password">Kodu Tekrar Gönder</a>
@@ -780,8 +787,8 @@ app.post('/reset-password', sensitiveActionLimiter, async (req, res) => {
         const code = String(req.body.code || '').trim();
         const newPassword = String(req.body.newPassword || '');
 
-        if (!email || !code || newPassword.length < 6) {
-            return res.send(resetPasswordForm(email, 'Kod ve en az 6 karakterlik yeni şifre gerekli.', true));
+        if (!email || !code || newPassword.length < 8) {
+            return res.send(resetPasswordForm(email, 'Kod ve en az 8 karakterlik yeni şifre gerekli.', true));
         }
 
         // Kodu doğrulamak için Supabase'e soruyoruz - başarılı olursa bize
@@ -1157,7 +1164,7 @@ app.post('/profile', requireLogin, async (req, res) => {
         // ikisi "profiles" tablosunda değil, "auth.users"da tutuluyor).
         const authUpdates = {};
         if (email !== user.email) authUpdates.email = email;
-        if (newPassword && newPassword.length >= 6) authUpdates.password = newPassword;
+        if (newPassword && newPassword.length >= 8) authUpdates.password = newPassword;
         if (Object.keys(authUpdates).length > 0) {
             const { error: authUpdateError } = await supabase.auth.admin.updateUserById(user.id, authUpdates);
             if (authUpdateError) {
@@ -1794,8 +1801,8 @@ app.post('/api/change-password', sensitiveActionLimiter, async (req, res) => {
         if (!oldPassword || !newPassword) {
             return res.status(400).json({ success: false, message: 'Mevcut ve yeni şifre gerekli.' });
         }
-        if (String(newPassword).length < 6) {
-            return res.status(400).json({ success: false, message: 'Yeni şifre en az 6 karakter olmalı.' });
+        if (String(newPassword).length < 8) {
+            return res.status(400).json({ success: false, message: 'Yeni şifre en az 8 karakter olmalı.' });
         }
         const { error: verifyError } = await supabaseAuthClient.auth.signInWithPassword({ email: user.email, password: oldPassword });
         if (verifyError) {

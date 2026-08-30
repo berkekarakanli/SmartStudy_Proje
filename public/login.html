@@ -266,6 +266,11 @@
                 return;
             }
 
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+                showToast("Hata: Geçerli bir e-posta adresi giriniz.", "error");
+                return;
+            }
+
             const originalText = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-circle-notch fa-spin me-2"></i>Sistem Doğrulanıyor...';
             btn.disabled = true;
