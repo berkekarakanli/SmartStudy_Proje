@@ -319,8 +319,9 @@
             <p class="small text-secondary">Akademik Analiz Sistemine Katılın</p>
         </div>
 
-        <!-- Firebase Hosting statik olduğu için form doğrudan Render'daki canlı backend'e gönderiliyor -->
-        <form action="https://smartstudy-proje.onrender.com/register" method="POST" id="registerForm" onsubmit="return validateRegister()">
+        <!-- Bu sayfa da backend ile aynı sunucudan (Render) geliyor - göreceli
+             yol kullanıyoruz, hangi adresten girilirse girilsin çalışır. -->
+        <form action="/register" method="POST" id="registerForm" onsubmit="return validateRegister()">
             
             <!-- GİZLİ INPUT (Rol Değerini Server'a Göndermek İçin) -->
             <input type="hidden" name="role" id="selected-role" value="student">

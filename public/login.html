@@ -184,9 +184,11 @@
     <a href="/" class="back-home mt-4"><i class="fas fa-arrow-left me-1"></i>Ana Sayfaya Dön</a>
 
     <script>
-        // Firebase Hosting (bu sayfa) ile Render (backend) farklı domainler
-        // olduğu için tüm istekler mutlak adrese gidiyor.
-        const API_BASE = 'https://smartstudy-proje.onrender.com';
+        // Bu sayfa da backend ile aynı sunucudan (Render) geliyor - göreceli
+        // (relative) yol kullanıyoruz, böylece hangi adresten
+        // (smartstudy.com.tr veya onrender.com) girilirse girilsin hep
+        // doğru çalışır ve CORS'a hiç gerek kalmaz.
+        const API_BASE = '';
         let selectedRole = 'student';
 
         function switchTheme(role) {

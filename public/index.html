@@ -252,11 +252,12 @@
     </div>
 </nav>
 <script>
-    // Bu sayfa (index.html) hem Render'da hem Firebase Hosting'de statik
-    // olarak yayında - kendi başına oturum bilgisine erişemiyor. Sayfa
-    // yüklenince Render backend'ine sorup üst menüyü buna göre değiştiriyoruz.
+    // Bu sayfa da backend ile aynı sunucudan (Render) geliyor - göreceli
+    // (relative) yol kullanıyoruz, böylece hangi adresten (smartstudy.com.tr
+    // veya onrender.com) girilirse girilsin hep doğru çalışır ve CORS'a
+    // hiç gerek kalmaz.
     (function () {
-        const API_BASE = 'https://smartstudy-proje.onrender.com';
+        const API_BASE = '';
         fetch(API_BASE + '/api/me', { credentials: 'include' })
             .then(r => r.json())
             .then(data => {

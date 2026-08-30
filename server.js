@@ -59,7 +59,7 @@ const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toSt
 // E-posta doğrulama ve şifre sıfırlama linklerinin yönlendirileceği adres.
 // Render'da PUBLIC_URL tanımlı değilse canlı adrese, o da yoksa yerel
 // geliştirme adresine düşer.
-const PUBLIC_URL = process.env.PUBLIC_URL || 'https://smartstudy-proje.onrender.com';
+const PUBLIC_URL = process.env.PUBLIC_URL || 'https://smartstudy.com.tr';
 
 // express.json()'ın varsayılan gövde limiti 100kb - hata defterine bir
 // fotoğraf base64 olarak eklenirken (gerçek bir telefon fotoğrafı kolayca
