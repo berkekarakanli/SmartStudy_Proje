@@ -18,6 +18,54 @@ if (!apiKey) {
     console.warn('[geminiService] GEMINI_API_KEY tanımlı değil. Optik belge doğrulama (leaderboard) devre dışı kalacak.');
 }
 
+// Ücretsiz katmanda dakikada en fazla 15 istek hakkımız var (bkz. Google AI
+// Studio > Rate Limit). Aynı anda birden fazla öğrenci mesaj gönderirse
+// (örn. 50 kullanıcı aynı dakikada) hepsini olduğu gibi Gemini'ye
+// göndermek 429 hatasına yol açar. Bunun yerine tüm istekleri TEK bir
+// sırada topluyoruz ve dakikada en fazla 12 tanesini (küçük bir güvenlik
+// payıyla) gönderiyoruz - fazlası hata almak yerine sırada birkaç saniye
+// bekliyor, kullanıcıya hiçbir zaman çıplak bir hata görünmüyor.
+//
+// NOT: Bu, sunucunun TEK bir process olarak çalıştığı varsayımına dayanır
+// (Render'da şu an WEB_CONCURRENCY=1) - birden fazla instance'a çıkılırsa
+// bu sıralama paylaşılan bir depoya (örn. Postgres) taşınmalı.
+const GEMINI_ISTEK_SIRASI = [];
+const DAKIKA_BASI_MAKS_ISTEK = 12;
+// Bilinçli olarak modül seviyesinde (fonksiyon içinde DEĞİL) tutuluyor -
+// aksi halde her yeni istek geldiğinde siraCalistir() yeniden başlayıp bu
+// diziyi sıfırlıyor ve sayaç hiç birikmiyor (test ederken tam da bu hatayı
+// yakaladık: 10 istek de "throttle" hiç devreye girmeden anında geçiyordu).
+const GONDERIM_ZAMANLARI = [];
+let siraIsleniyor = false;
+
+function geminiSiradaBekle() {
+    return new Promise((resolve, reject) => {
+        GEMINI_ISTEK_SIRASI.push({ resolve, reject });
+        siraCalistir();
+    });
+}
+
+async function siraCalistir() {
+    if (siraIsleniyor) return;
+    siraIsleniyor = true;
+
+    while (GEMINI_ISTEK_SIRASI.length > 0) {
+        const now = Date.now();
+        while (GONDERIM_ZAMANLARI.length && now - GONDERIM_ZAMANLARI[0] > 60000) GONDERIM_ZAMANLARI.shift();
+
+        if (GONDERIM_ZAMANLARI.length >= DAKIKA_BASI_MAKS_ISTEK) {
+            const bekleme = 60000 - (now - GONDERIM_ZAMANLARI[0]) + 250;
+            await new Promise(r => setTimeout(r, bekleme));
+            continue;
+        }
+
+        const istek = GEMINI_ISTEK_SIRASI.shift();
+        GONDERIM_ZAMANLARI.push(Date.now());
+        istek.resolve();
+    }
+    siraIsleniyor = false;
+}
+
 /**
  * Gemini'nin ücretsiz katmanı düşük bir istek sınırına sahip (429 /
  * RESOURCE_EXHAUSTED) ve bazen "şu an yoğunluk var" diye 503/UNAVAILABLE
@@ -41,6 +89,7 @@ function retryDelayMsCikar(error) {
 
 async function generateWithRetry(params, retries = 2, varsayilanDelayMs = 3000) {
     try {
+        await geminiSiradaBekle();
         return await ai.models.generateContent(params);
     } catch (error) {
         const mesaj = String(error?.message || error);
