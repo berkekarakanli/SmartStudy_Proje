@@ -42,7 +42,20 @@ app.use(cors({
 const { supabase, supabaseAuthClient } = require('./supabaseClient');
 
 const PORT = process.env.PORT || 3000;
-const SESSION_SECRET = process.env.SESSION_SECRET || 'smartstudy-dev-secret-change-me';
+
+// GÜVENLİK: Eskiden SESSION_SECRET tanımlı değilse sabit, GitHub'da herkesin
+// görebileceği bir değere ('smartstudy-dev-secret-change-me') sessizce
+// düşülüyordu - Render'da bu değişkeni tanımlamayı unutursak, bu sabit
+// değeri bilen biri sahte oturum çerezi üretip başkasının hesabına
+// girebilirdi. Şimdi: gerçek bir sunucuda (Render veya NODE_ENV=production)
+// bu değişken yoksa sunucu AÇILMIYOR (sessiz bir güvenlik açığından iyidir);
+// yerel geliştirmede ise her açılışta rastgele, tahmin edilemez bir anahtar
+// üretiliyor (sabit bir değer yerine).
+if (!process.env.SESSION_SECRET && (process.env.RENDER || process.env.NODE_ENV === 'production')) {
+    console.error('[GÜVENLİK] SESSION_SECRET ortam değişkeni tanımlı değil! Render\'ın Environment sekmesinden rastgele, uzun bir değer tanımlayın. Bu olmadan sunucu güvenli şekilde başlatılamaz.');
+    process.exit(1);
+}
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 // E-posta doğrulama ve şifre sıfırlama linklerinin yönlendirileceği adres.
 // Render'da PUBLIC_URL tanımlı değilse canlı adrese, o da yoksa yerel
 // geliştirme adresine düşer.
@@ -301,19 +314,30 @@ async function currentUser(req) {
     return data;
 }
 
-// Flutter (mobil + web) istemcisi session çerezi taşımıyor; bunun yerine
-// userId'yi doğrudan query/body içinde gönderiyor. Bu fonksiyon önce
-// session'a bakar (Bootstrap web arayüzü için), yoksa istekte gelen userId'yi
-// Firestore'da doğrulayarak kullanıcıyı döndürür (mobil/stateless istekler
-// için). Böylece aynı uç hem tarayıcıdan hem uygulamadan çalışabilir.
+// Flutter (mobil) istemcisi session çerezi taşıyamadığı için, kimliğini
+// "Authorization: Bearer <token>" başlığında gönderdiği bir Supabase erişim
+// tokeniyle kanıtlıyor - bu token /login'de üretiliyor. Token'ı Supabase'e
+// sorup GERÇEKTEN o token'a ait kullanıcıyı buluyoruz.
+//
+// GÜVENLİK NOTU: Eskiden bu fonksiyon, istemcinin request body/query'sinde
+// gönderdiği çıplak bir "userId" değerine hiçbir doğrulama yapmadan
+// güveniyordu - yani biri başka bir kullanıcının ID'sini bilse/ele geçirse,
+// o kullanıcı gibi davranıp verilerini görebilir/silebilir, hatta kendini
+// Premium yapabilirdi. Bu ciddi bir kimliğe bürünme açığıydı, şimdi
+// kapatıldı. Flutter tarafı bu token'ı gönderecek şekilde güncellenene kadar
+// mobil uçlar (bilinçli olarak) çalışmayacak.
 async function resolveUser(req) {
     const sessionUser = await currentUser(req);
     if (sessionUser) return sessionUser;
 
-    const explicitId = req.body?.userId || req.query?.userId;
-    if (!explicitId) return null;
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    if (!token) return null;
 
-    const { data, error } = await supabase.from('profiles').select('*').eq('id', String(explicitId)).maybeSingle();
+    const { data: tokenData, error: tokenError } = await supabase.auth.getUser(token);
+    if (tokenError || !tokenData?.user) return null;
+
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', tokenData.user.id).maybeSingle();
     if (error || !data) return null;
     return data;
 }
@@ -602,7 +626,22 @@ app.post('/login', loginLimiter, async (req, res) => {
         if (req.body.rememberMe) {
             req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
         }
-        res.json({ success: true, role: user.role, userId: user.id, id: user.id, level: user.level || 'Free' });
+        // accessToken: mobil (Flutter) istemcisi web'deki gibi çerez (cookie)
+        // taşıyamadığı için, kimliğini kanıtlamak amacıyla bundan sonraki
+        // isteklerinde bu token'ı "Authorization: Bearer <token>" başlığında
+        // göndermesi gerekiyor - resolveUser() bu token'ı Supabase'e sorup
+        // doğruluyor. (Flutter tarafı bunu kullanacak şekilde güncellenene
+        // kadar mobil uçlar bu token olmadan çalışmaz - bilinçli bir karar,
+        // eskiden istemcinin "ben buyum" diye gönderdiği userId'ye körü
+        // körüne güvenilmesi ciddi bir kimliğe bürünme açığıydı.)
+        res.json({
+            success: true,
+            role: user.role,
+            userId: user.id,
+            id: user.id,
+            level: user.level || 'Free',
+            accessToken: signInData.session ? signInData.session.access_token : null
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'Sunucu bağlantı hatası.' });
