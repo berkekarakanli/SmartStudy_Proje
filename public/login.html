@@ -293,6 +293,10 @@
                     // Panel her zaman Render üzerinde canlı/dinamik olarak
                     // render edildiği için oraya yönlendiriyoruz.
                     window.location.href = API_BASE + '/dashboard';
+                } else if (data.emailNotConfirmed) {
+                    // E-posta doğrulanmamış - kullanıcıyı direkt kod girme
+                    // sayfasına gönderiyoruz, tekrar giriş denemesine gerek yok.
+                    window.location.href = '/verify-email?email=' + encodeURIComponent(email);
                 } else {
                     showToast(data.message || "E-Posta veya Şifre Hatalı.", "error");
                     btn.innerHTML = originalText;
@@ -306,23 +310,6 @@
             }
         }
 
-        // Kayıt sırasında gönderilen doğrulama maili tıklanınca Supabase,
-        // e-postayı kendi tarafında onaylayıp tarayıcıyı buraya
-        // (/login?verified=1) yönlendiriyor. Kimlik bilgileri adresin #
-        // (hash) kısmında geliyor, biz onu hiç kullanmıyoruz (kendi
-        // session/cookie sistemimiz ayrı) - sadece temizliyoruz ki
-        // kullanıcı adres çubuğunda uzun bir token görmesin.
-        (function () {
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('verified') === '1') {
-                showToast('E-postan başarıyla doğrulandı! Şimdi giriş yapabilirsin.', 'success');
-            } else if (window.location.hash.includes('error=')) {
-                showToast('Doğrulama bağlantısının süresi dolmuş veya geçersiz. Kayıt ol/giriş yap sayfasından tekrar dene.', 'error');
-            }
-            if (window.location.hash) {
-                history.replaceState(null, '', window.location.pathname + window.location.search);
-            }
-        })();
     </script>
 
 </body>

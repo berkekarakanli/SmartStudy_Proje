@@ -56,10 +56,6 @@ if (!process.env.SESSION_SECRET && (process.env.RENDER || process.env.NODE_ENV =
     process.exit(1);
 }
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
-// E-posta doğrulama ve şifre sıfırlama linklerinin yönlendirileceği adres.
-// Render'da PUBLIC_URL tanımlı değilse canlı adrese, o da yoksa yerel
-// geliştirme adresine düşer.
-const PUBLIC_URL = process.env.PUBLIC_URL || 'https://smartstudy.com.tr';
 
 // express.json()'ın varsayılan gövde limiti 100kb - hata defterine bir
 // fotoğraf base64 olarak eklenirken (gerçek bir telefon fotoğrafı kolayca
@@ -518,16 +514,16 @@ app.post('/register', registerLimiter, async (req, res) => {
         //
         // ÖNEMLİ: admin.createUser() DEĞİL, bilinçli olarak PUBLIC signUp()
         // kullanıyoruz (anon anahtarlı supabaseAuthClient üzerinden) - sadece
-        // signUp(), Supabase'in Authentication > Emails kısmında az önce SMTP
-        // (Gmail) ayarını yaptığımız "Confirm sign up" e-postasını OTOMATİK
-        // gönderiyor. admin.createUser() bunu tetiklemiyor, sessizce
-        // email_confirm bayrağını set eder ama mail atmaz.
+        // signUp(), Supabase'in Authentication > Emails kısmında ayarladığımız
+        // "Confirm sign up" e-postasını OTOMATİK gönderiyor. admin.createUser()
+        // bunu tetiklemiyor. E-posta artık bir LİNK değil, 6 haneli bir KOD
+        // içeriyor (Supabase şablonundaki {{ .Token }} değişkeni) -
+        // kullanıcı bu kodu /verify-email sayfasına yazıyor.
         const { data: authData, error: authError } = await supabaseAuthClient.auth.signUp({
             email,
             password: sifre,
             options: {
-                data: { ad, role, kvkk_onay: kvkkOnayVerildi, sozlesme_onay: sozlesmeOnayVerildi },
-                emailRedirectTo: `${PUBLIC_URL}/login?verified=1`
+                data: { ad, role, kvkk_onay: kvkkOnayVerildi, sozlesme_onay: sozlesmeOnayVerildi }
             }
         });
 
@@ -572,20 +568,65 @@ app.post('/register', registerLimiter, async (req, res) => {
                 id: newUserId,
                 role,
                 emailConfirmationRequired: true,
-                message: `${email} adresine bir doğrulama bağlantısı gönderdik. Giriş yapmadan önce e-postanı doğrulaman gerekiyor.`
+                message: `${email} adresine 6 haneli bir doğrulama kodu gönderdik. Giriş yapmadan önce e-postanı doğrulaman gerekiyor.`
             });
         }
-        res.send(infoPage(
-            'E-Postanı Doğrula',
-            `${email} adresine bir doğrulama bağlantısı gönderdik. Gelen kutunu (bulamazsan spam/gereksiz klasörünü) kontrol edip bağlantıya tıkladıktan sonra giriş yapabilirsin.`,
-            '/login'
-        ));
+        res.redirect('/verify-email?email=' + encodeURIComponent(email));
     } catch (error) {
         console.error(error);
         const msg = 'Kayıt işlemi sırasında hata oluştu.';
         if (wantsJson(req)) return res.status(500).json({ success: false, message: msg });
         res.status(500).send(errorPage('Sunucu Hatası', msg, '/register'));
     }
+});
+
+// ==========================================
+// 5C. E-POSTA DOĞRULAMA (KOD TABANLI)
+// ==========================================
+function verifyEmailForm(email, message, isError) {
+    return `
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <title>E-Postanı Doğrula</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
+        <main class="text-center p-4" style="max-width: 420px; width: 100%;">
+            <h1 class="h3 mb-3">E-Postanı Doğrula</h1>
+            <p class="text-white-50">${escapeHtml(email)} adresine gönderdiğimiz 6 haneli kodu gir.</p>
+            ${message ? `<div class="alert ${isError ? 'alert-warning' : 'alert-info'}">${escapeHtml(message)}</div>` : ''}
+            <form method="POST" action="/verify-email" class="d-flex flex-column gap-2">
+                <input type="hidden" name="email" value="${escapeHtml(email)}">
+                <input type="text" name="code" class="form-control text-center" placeholder="6 haneli kod" inputmode="numeric" maxlength="6" required autofocus>
+                <button type="submit" class="btn btn-info text-dark fw-bold">Doğrula</button>
+            </form>
+            <a class="btn btn-outline-secondary mt-3" href="/login">Giriş Sayfasına Dön</a>
+        </main>
+    </body>
+    </html>`;
+}
+
+app.get('/verify-email', (req, res) => {
+    const email = String(req.query.email || '').trim().toLowerCase();
+    res.send(verifyEmailForm(email));
+});
+
+app.post('/verify-email', sensitiveActionLimiter, async (req, res) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const code = String(req.body.code || '').trim();
+
+    if (!email || !code) {
+        return res.send(verifyEmailForm(email, 'E-posta ve kod gerekli.', true));
+    }
+
+    const { error } = await supabaseAuthClient.auth.verifyOtp({ email, token: code, type: 'signup' });
+    if (error) {
+        return res.send(verifyEmailForm(email, 'Kod geçersiz veya süresi dolmuş. Kayıt sayfasından tekrar dene ya da destek ile iletişime geç.', true));
+    }
+
+    res.send(infoPage('E-Postan Doğrulandı', 'Tebrikler, e-postan doğrulandı! Şimdi giriş yapabilirsin.', '/login'));
 });
 
 app.post('/login', loginLimiter, async (req, res) => {
@@ -649,10 +690,15 @@ app.post('/login', loginLimiter, async (req, res) => {
 });
 
 // ==========================================
-// 5B. ŞİFREMİ UNUTTUM
+// 5B. ŞİFREMİ UNUTTUM (KOD TABANLI)
 // ==========================================
-// Basit bir HTML form döndüren yardımcı - errorPage/infoPage ile aynı stil,
-// ayrı bir .html şablonu oluşturmaya gerek kalmasın diye burada satır içi.
+// ÖNEMLİ: Link tabanlı akış (Supabase'in linke tıklayınca tarayıcıyı
+// yönlendirmesi) Site URL / Redirect URLs ayarlarına bağımlı olduğu ve
+// bu ayarların doğru olmadığı durumlarda kullanıcıyı yanlış yere (hatta
+// localhost'a) göndermeye çok açık olduğu için, bunun yerine kullanıcının
+// e-postasına gelen 6 haneli kodu doğrudan bu sayfaya yazdığı bir akış
+// kullanıyoruz - hiçbir yönlendirmeye ihtiyaç yok, tamamen bu sunucudan
+// yönetiliyor.
 function forgotPasswordForm(message) {
     return `
     <!DOCTYPE html>
@@ -665,11 +711,11 @@ function forgotPasswordForm(message) {
     <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
         <main class="text-center p-4" style="max-width: 420px;">
             <h1 class="h3 mb-3">Şifremi Unuttum</h1>
-            <p class="text-white-50">Kayıtlı e-posta adresini gir, sana bir şifre sıfırlama bağlantısı gönderelim.</p>
+            <p class="text-white-50">Kayıtlı e-posta adresini gir, sana 6 haneli bir doğrulama kodu gönderelim.</p>
             ${message ? `<div class="alert alert-info">${escapeHtml(message)}</div>` : ''}
             <form method="POST" action="/forgot-password" class="d-flex flex-column gap-2">
                 <input type="email" name="email" class="form-control" placeholder="E-posta adresin" required>
-                <button type="submit" class="btn btn-info text-dark fw-bold">Bağlantı Gönder</button>
+                <button type="submit" class="btn btn-info text-dark fw-bold">Kod Gönder</button>
             </form>
             <a class="btn btn-outline-secondary mt-3" href="/login">Giriş Sayfasına Dön</a>
         </main>
@@ -686,30 +732,19 @@ app.post('/forgot-password', sensitiveActionLimiter, async (req, res) => {
     if (email) {
         // Hata olsa bile kullanıcıya her zaman aynı mesajı gösteriyoruz -
         // aksi halde "bu e-posta kayıtlı mı değil mi" bilgisini dışarıya
-        // sızdırmış (email enumeration) oluruz.
+        // sızdırmış (email enumeration) oluruz. redirectTo artık yok -
+        // kod tabanlı akışta hiç kullanılmıyor.
         try {
-            await supabaseAuthClient.auth.resetPasswordForEmail(email, {
-                redirectTo: `${PUBLIC_URL}/reset-password`
-            });
+            await supabaseAuthClient.auth.resetPasswordForEmail(email);
         } catch (error) {
             console.error(error);
         }
     }
-    res.send(infoPage(
-        'Bağlantı Gönderildi',
-        'Bu e-posta sistemde kayıtlıysa, şifre sıfırlama bağlantısını içeren bir mail gönderdik. Gelen kutunu (ve spam klasörünü) kontrol et.',
-        '/login'
-    ));
+    res.redirect('/reset-password?email=' + encodeURIComponent(email));
 });
 
-// Supabase'in şifre sıfırlama linki tarayıcıyı buraya, kimlik doğrulama
-// bilgilerini adresin # (hash) kısmında taşıyarak yönlendiriyor - bu kısım
-// sunucuya hiç gitmiyor, sadece tarayıcıda görünüyor. Bu yüzden yeni şifreyi
-// almak için sunucu tarafı değil, sayfanın içindeki JavaScript (supabase-js
-// ile) kullanılıyor; anon anahtar burada güvenle kullanılabilir çünkü zaten
-// tarayıcı tarafında açık/genel kullanım için tasarlanmış bir anahtar.
-app.get('/reset-password', (req, res) => {
-    res.send(`
+function resetPasswordForm(email, message, isError) {
+    return `
     <!DOCTYPE html>
     <html lang="tr">
     <head>
@@ -720,55 +755,54 @@ app.get('/reset-password', (req, res) => {
     <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
         <main class="text-center p-4" style="max-width: 420px; width: 100%;">
             <h1 class="h3 mb-3">Yeni Şifre Belirle</h1>
-            <div id="status" class="alert alert-info">Bağlantı doğrulanıyor...</div>
-            <form id="resetForm" class="d-flex flex-column gap-2 d-none">
-                <input type="password" id="newPassword" class="form-control" placeholder="Yeni şifre (en az 6 karakter)" minlength="6" required>
+            <p class="text-white-50">${escapeHtml(email)} adresine gönderdiğimiz 6 haneli kodu ve yeni şifreni gir.</p>
+            ${message ? `<div class="alert ${isError ? 'alert-warning' : 'alert-info'}">${escapeHtml(message)}</div>` : ''}
+            <form method="POST" action="/reset-password" class="d-flex flex-column gap-2">
+                <input type="hidden" name="email" value="${escapeHtml(email)}">
+                <input type="text" name="code" class="form-control text-center" placeholder="6 haneli kod" inputmode="numeric" maxlength="6" required autofocus>
+                <input type="password" name="newPassword" class="form-control" placeholder="Yeni şifre (en az 6 karakter)" minlength="6" required>
                 <button type="submit" class="btn btn-info text-dark fw-bold">Şifreyi Güncelle</button>
             </form>
-            <a class="btn btn-outline-secondary mt-3" href="/login">Giriş Sayfasına Dön</a>
+            <a class="btn btn-outline-secondary mt-3" href="/forgot-password">Kodu Tekrar Gönder</a>
         </main>
-        <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-        <script>
-            const supabaseClient = window.supabase.createClient(
-                ${JSON.stringify(process.env.SUPABASE_URL)},
-                ${JSON.stringify(process.env.SUPABASE_ANON_KEY)}
-            );
-            const statusEl = document.getElementById('status');
-            const formEl = document.getElementById('resetForm');
-
-            supabaseClient.auth.onAuthStateChange((event, session) => {
-                if (event === 'PASSWORD_RECOVERY') {
-                    statusEl.classList.add('d-none');
-                    formEl.classList.remove('d-none');
-                }
-            });
-
-            // Sayfa yenilenirse veya olay kaçırılırsa, mevcut oturuma bak.
-            setTimeout(async () => {
-                const { data } = await supabaseClient.auth.getSession();
-                if (data.session && formEl.classList.contains('d-none')) {
-                    statusEl.classList.add('d-none');
-                    formEl.classList.remove('d-none');
-                } else if (!data.session && statusEl && !statusEl.classList.contains('d-none')) {
-                    statusEl.textContent = 'Bağlantı geçersiz veya süresi dolmuş. Şifremi Unuttum sayfasından yeni bir bağlantı iste.';
-                    statusEl.classList.replace('alert-info', 'alert-warning');
-                }
-            }, 2500);
-
-            formEl.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const newPassword = document.getElementById('newPassword').value;
-                const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
-                if (error) {
-                    alert('Şifre güncellenemedi: ' + error.message);
-                    return;
-                }
-                alert('Şifren güncellendi, şimdi giriş yapabilirsin.');
-                window.location.href = '/login';
-            });
-        </script>
     </body>
-    </html>`);
+    </html>`;
+}
+
+app.get('/reset-password', (req, res) => {
+    const email = String(req.query.email || '').trim().toLowerCase();
+    res.send(resetPasswordForm(email));
+});
+
+app.post('/reset-password', sensitiveActionLimiter, async (req, res) => {
+    try {
+        const email = String(req.body.email || '').trim().toLowerCase();
+        const code = String(req.body.code || '').trim();
+        const newPassword = String(req.body.newPassword || '');
+
+        if (!email || !code || newPassword.length < 6) {
+            return res.send(resetPasswordForm(email, 'Kod ve en az 6 karakterlik yeni şifre gerekli.', true));
+        }
+
+        // Kodu doğrulamak için Supabase'e soruyoruz - başarılı olursa bize
+        // o kullanıcı için geçici bir oturum (session) döndürüyor, biz de
+        // service_role ile doğrudan şifresini güncelliyoruz.
+        const { data, error } = await supabaseAuthClient.auth.verifyOtp({ email, token: code, type: 'recovery' });
+        if (error || !data.user) {
+            return res.send(resetPasswordForm(email, 'Kod geçersiz veya süresi dolmuş. Tekrar kod isteyebilirsin.', true));
+        }
+
+        const { error: updateError } = await supabase.auth.admin.updateUserById(data.user.id, { password: newPassword });
+        if (updateError) {
+            console.error(updateError);
+            return res.send(resetPasswordForm(email, 'Şifre güncellenemedi, tekrar dene.', true));
+        }
+
+        res.send(infoPage('Şifre Güncellendi', 'Şifren başarıyla güncellendi. Şimdi yeni şifrenle giriş yapabilirsin.', '/login'));
+    } catch (error) {
+        console.error(error);
+        res.send(resetPasswordForm(String(req.body.email || ''), 'Beklenmeyen bir hata oluştu, tekrar dene.', true));
+    }
 });
 
 // ==========================================
