@@ -60,6 +60,10 @@ create table public.profiles (
     ayt_alani text check (ayt_alani in ('SAY', 'EA', 'SOZ')),
     hedef text,
     kaynak_sayilari jsonb default '{}'::jsonb,
+    -- { dersAdi: [konu, konu, ...] } - sohbet sırasında öğrencinin "bunu
+    -- zaten bitirdim" dediği konular; ödev planı bunları tekrar "öğren" diye
+    -- vermez, sadece hata varsa pekiştirme olarak önerir.
+    tamamlanan_konular jsonb default '{}'::jsonb,
     ai_onboarding_tamamlandi boolean not null default false
 );
 
@@ -100,6 +104,10 @@ create table public.wrong_questions (
     id uuid primary key default gen_random_uuid(),
     user_id uuid not null references public.profiles(id) on delete cascade,
     question_text text default 'Hatalı Soru Kaydı',
+    -- Hangi derse ait olduğu (AI Koç'un "normalde güçlü olduğun derste hata
+    -- yaptın" gibi tepkisel farkındalık göstermesi için gerekli - eskiden
+    -- tutulmuyordu).
+    subject text,
     ai_solution text default '',
     image_base64 text,
     tarih timestamptz not null default now()
@@ -281,3 +289,23 @@ create table public.ai_yorumlari (
 create index idx_ai_yorumlari_user_id on public.ai_yorumlari(user_id);
 
 alter table public.ai_yorumlari enable row level security;
+
+-- ==========================================
+-- AI_MESAJLAR (AI Koç V2 - gerçek sohbet geçmişi)
+-- ==========================================
+-- ai_yorumlari'nın (tek seferlik yorum) yerini alıyor - artık AI Koç bir
+-- sohbet, tüm mesaj geçmişi burada tutuluyor. "okunmadi" alanı, öğrenci
+-- yazmadan AI'nin kendiliğinden attığı proaktif mesajları (örn. "normalde
+-- güçlü olduğun derste hata yaptın") rozetle göstermek için.
+create table public.ai_mesajlar (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references public.profiles(id) on delete cascade,
+    rol text not null check (rol in ('user', 'ai')),
+    mesaj text not null,
+    okunmadi boolean not null default true,
+    tarih timestamptz not null default now()
+);
+
+create index idx_ai_mesajlar_user_tarih on public.ai_mesajlar(user_id, tarih);
+
+alter table public.ai_mesajlar enable row level security;

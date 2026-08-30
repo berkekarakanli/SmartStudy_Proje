@@ -329,4 +329,15 @@ function getKaynakDersleri(sinif, aytAlani) {
     return Object.keys(getMufredat(sinif, aytAlani).dersler);
 }
 
-module.exports = { EXAM_DATES, SYLLABUS, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getKaynakDersleri };
+/**
+ * Hata defterine soru eklerken "hangi ders" diye sorulacak birleşik ders
+ * listesi - öğrencinin o an hangi sınava hazırlandığı bu ekranda bilinmediği
+ * için TYT+AYT+KPSS+LGS'deki tüm ders adlarının tekrarsız birleşimi.
+ */
+function getTumDersler() {
+    const hepsi = new Set();
+    Object.values(SYLLABUS).forEach(dersler => Object.keys(dersler).forEach(d => hepsi.add(d)));
+    return Array.from(hepsi).sort((a, b) => a.localeCompare(b, 'tr'));
+}
+
+module.exports = { EXAM_DATES, SYLLABUS, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getKaynakDersleri, getTumDersler };

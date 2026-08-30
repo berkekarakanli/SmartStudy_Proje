@@ -32,11 +32,23 @@
             <div class="alert alert-warning"><i class="fas fa-lock me-2"></i>Free üyelikte en fazla 5 soru saklayabilirsin. Sınırsız eklemek için <a href="/payment" class="alert-link">Premium'a geç</a>.</div>
         <% } else { %>
             <form id="addForm" class="row g-3 mb-4 align-items-end">
-                <div class="col-md-5">
+                <div class="col-md-3">
                     <label class="form-label small">Soru Fotoğrafı (opsiyonel)</label>
                     <input type="file" accept="image/*" id="questionImage" class="form-control">
                 </div>
-                <div class="col-md-5">
+                <div class="col-md-3">
+                    <label class="form-label small">Ders</label>
+                    <select id="questionSubject" class="form-select form-control">
+                        <option value="">Seç (opsiyonel)</option>
+                        <% tumDersler.forEach(d => { %>
+                            <option value="<%= d %>"><%= d %></option>
+                        <% }) %>
+                    </select>
+                    <!-- Ders seçimi AI Koç'un "bu öğrenci normalde güçlü olduğu
+                         bir derste mi hata yapıyor" farkını anlayabilmesi için
+                         önemli - eskiden bu bilgi hiç tutulmuyordu. -->
+                </div>
+                <div class="col-md-4">
                     <label class="form-label small">Doğru Çözüm / Not</label>
                     <input type="text" id="questionNote" class="form-control" placeholder="Örn: İşlem hatası yaptım...">
                 </div>
@@ -59,7 +71,10 @@
                             <div class="text-center text-secondary py-5 small">Fotoğraf yok</div>
                         <% } %>
                         <div class="card-body">
-                            <p class="small text-secondary mb-1"><%= q.tarih ? new Date(q.tarih).toLocaleDateString('tr-TR') : '' %></p>
+                            <p class="small text-secondary mb-1">
+                                <%= q.tarih ? new Date(q.tarih).toLocaleDateString('tr-TR') : '' %>
+                                <% if (q.subject) { %><span class="badge bg-secondary ms-1"><%= q.subject %></span><% } %>
+                            </p>
                             <p class="card-text text-success small"><%= q.ai_solution || 'Not yok' %></p>
                             <form data-delete-form action="/api/delete-wrong-question" method="POST" class="m-0">
                                 <input type="hidden" name="questionId" value="<%= q.id %>">
@@ -130,6 +145,7 @@
                         body: JSON.stringify({
                             userId: CURRENT_USER_ID,
                             question_text: 'Hatalı Soru Kaydı',
+                            subject: document.getElementById('questionSubject').value || null,
                             ai_solution: note || 'Not girilmemiş.',
                             image_base64
                         })

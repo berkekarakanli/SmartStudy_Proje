@@ -11,8 +11,8 @@ const crypto = require('crypto');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const ejs = require('ejs');
-const { readNetFromOpticImage, generateNetAnalysis, generateHomeworkPlan } = require('./geminiService');
-const { EXAM_DATES, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getKaynakDersleri } = require('./curriculum');
+const { readNetFromOpticImage, generateHomeworkPlan, generateChatReply } = require('./geminiService');
+const { EXAM_DATES, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getTumDersler } = require('./curriculum');
 
 const app = express();
 
@@ -1303,7 +1303,7 @@ app.get('/wrong-questions', requireLogin, async (req, res) => {
 
         const limitReached = user.level !== 'Premium' && questions.length >= 5;
 
-        res.render('wrong-questions', { user, questions, limitReached });
+        res.render('wrong-questions', { user, questions, limitReached, tumDersler: getTumDersler() });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Hata defteri yüklenirken sorun oluştu.', '/dashboard'));
@@ -1323,181 +1323,164 @@ app.get('/student-coach', requireLogin, async (req, res) => {
         const { data: homeworks } = await supabase.from('homeworks').select('*').eq('student_id', user.id);
         const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ kod: user.bagli_koc_kodu, ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
 
-        // AI Koç bölümü için: en az bir net analizi var mı, kaç tane AI
-        // yorumu hakkı kaldı, geçmiş yorumlar neler - hepsini burada
-        // topluyoruz ki student-coach.html tek seferde render edebilsin.
-        const { data: analizler } = await supabase.from('analizler').select('id').eq('user_id', user.id);
-        const analizSayisi = (analizler || []).length;
-        const { data: aiGecmisi } = await supabase.from('ai_yorumlari').select('*').eq('user_id', user.id).order('tarih', { ascending: false });
-        const aiKullanimSayisi = (aiGecmisi || []).length;
-        // Free: ömür boyu 1 hak. Premium: sınırsız.
-        const aiHakkiVar = user.level === 'Premium' || aiKullanimSayisi < 1;
+        let { data: mesajlar } = await supabase.from('ai_mesajlar').select('*').eq('user_id', user.id).order('tarih', { ascending: true }).limit(50);
+        mesajlar = mesajlar || [];
 
-        // AI Koç onboarding (Faz 2/3): sınıf/hedef/kaynak bilgisi henüz
-        // alınmadıysa formda hangi derslerin sorulacağını, sınıf seçimine
-        // göre client tarafında dinamik hesaplayabilmesi için tüm sınıf
-        // seçeneklerinin ders listesini önceden çıkarıp gönderiyoruz.
-        const onboardingDersleri = {};
-        GECERLI_SINIFLAR.forEach(s => {
-            if (s === '11' || s === '12' || s === 'Mezun') {
-                GECERLI_AYT_ALANLARI.forEach(alan => {
-                    onboardingDersleri[`${s}_${alan}`] = getKaynakDersleri(s, alan);
-                });
-            } else {
-                onboardingDersleri[s] = getKaynakDersleri(s);
-            }
-        });
+        // Hiç sohbet başlamamışsa AI'nin açılış mesajını biz ekliyoruz -
+        // kullanıcı boş bir ekranla karşılaşmasın.
+        if (mesajlar.length === 0) {
+            const acilisMesaji = 'Merhaba! Ben senin AI Koçun. Sana kişisel bir çalışma programı çıkarabilmem için önce biraz tanışalım - kaçıncı sınıftasın?';
+            const { data: yeniMesaj } = await supabase.from('ai_mesajlar').insert({
+                user_id: user.id, rol: 'ai', mesaj: acilisMesaji, okunmadi: false
+            }).select('*').single();
+            if (yeniMesaj) mesajlar = [yeniMesaj];
+        }
 
-        res.render('student-coach', {
-            user,
-            homeworks: homeworks || [],
-            kocListesi,
-            analizSayisi,
-            aiGecmisi: aiGecmisi || [],
-            aiHakkiVar,
-            gecerliSiniflar: GECERLI_SINIFLAR,
-            onboardingDersleri
-        });
+        res.render('student-coach', { user, homeworks: homeworks || [], kocListesi, mesajlar });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Koç bilgisi yüklenirken sorun oluştu.', '/dashboard'));
     }
 });
 
-// AI Koç onboarding (Faz 2/3) - sınıf/hedef/ders bazlı kaynak sayısını bir
-// kere alıp profile kaydediyor, bir daha sorulmuyor.
-app.post('/api/ai-koc/onboarding', requireLogin, async (req, res) => {
+// AI Koç V2 - gerçek sohbet ucu. Kullanıcı mesajını kaydeder, Gemini'den
+// hem doğal bir cevap hem de o mesajdan çıkarılabilecek yapılandırılmış
+// profil güncellemesini (sınıf/hedef/kaynak/tamamlanan konu) tek seferde
+// alır, profili günceller ve gerekiyorsa ödev planını arka planda yeniler.
+app.post('/api/ai-koc/mesaj-gonder', requireLogin, async (req, res) => {
     try {
         const user = await currentUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
 
-        const { sinif, aytAlani, hedef, kaynakSayilari } = req.body;
+        const mesaj = typeof req.body.mesaj === 'string' ? req.body.mesaj.trim().slice(0, 1000) : '';
+        if (!mesaj) return res.status(400).json({ success: false, message: 'Boş mesaj gönderilemez.' });
 
-        if (!sinif || !GECERLI_SINIFLAR.includes(sinif)) {
-            return res.status(400).json({ success: false, message: 'Geçerli bir sınıf seçmelisin.' });
-        }
-        const sinifAytGerektirir = sinif === '11' || sinif === '12' || sinif === 'Mezun';
-        if (sinifAytGerektirir && !GECERLI_AYT_ALANLARI.includes(aytAlani)) {
-            return res.status(400).json({ success: false, message: 'Geçerli bir AYT alanı seçmelisin.' });
-        }
-
-        const dersListesi = getKaynakDersleri(sinif, sinifAytGerektirir ? aytAlani : undefined);
-        const temizKaynakSayilari = {};
-        dersListesi.forEach(ders => {
-            const ham = kaynakSayilari ? kaynakSayilari[ders] : undefined;
-            const sayi = Number.parseInt(ham, 10);
-            temizKaynakSayilari[ders] = Number.isFinite(sayi) && sayi >= 0 && sayi <= 20 ? sayi : 0;
-        });
-
-        await supabase.from('profiles').update({
-            sinif,
-            ayt_alani: sinifAytGerektirir ? aytAlani : null,
-            hedef: typeof hedef === 'string' ? hedef.slice(0, 200) : null,
-            kaynak_sayilari: temizKaynakSayilari,
-            ai_onboarding_tamamlandi: true
-        }).eq('id', user.id);
-
-        res.json({ success: true });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
-    }
-});
-
-// AI Koç'un gerçek analiz üretme ucu - kullanıcının en son net analizini ve
-// hata defterindeki son sorularını okuyup Gemini'ye gönderiyor, sonucu
-// ai_yorumlari tablosuna kaydedip aynı anda ekrana da dönüyor. Onboarding
-// tamamlanmışsa aynı anda sınıfına/kaynak sayısına/sınav tarihine uygun bir
-// ödev planı da üretip homeworks tablosuna ekliyor.
-app.post('/api/ai-koc/analiz-et', requireLogin, async (req, res) => {
-    try {
-        const user = await currentUser(req);
-        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
-
-        const { count: aiKullanimSayisi } = await supabase.from('ai_yorumlari').select('id', { count: 'exact', head: true }).eq('user_id', user.id);
-        if (user.level !== 'Premium' && (aiKullanimSayisi || 0) >= 1) {
-            return res.status(403).json({ success: false, message: 'Free üyelikte 1 kez AI Koç kullanabilirsin. Sınırsız kullanım için Premium\'a geçmelisin.', limitDoldu: true });
-        }
-
-        const { data: sonAnaliz } = await supabase.from('analizler').select('*').eq('user_id', user.id).order('tarih', { ascending: false }).limit(1).maybeSingle();
-        if (!sonAnaliz) {
-            return res.status(400).json({ success: false, message: 'Önce en az bir net analizi eklemelisin.' });
-        }
-
-        const { data: hataKayitlari } = await supabase.from('wrong_questions').select('question_text').eq('user_id', user.id).order('tarih', { ascending: false }).limit(15);
-        const hataDefteriSorulari = (hataKayitlari || []).map(h => h.question_text).filter(Boolean);
-
-        const yorum = await generateNetAnalysis({
-            sinavTuru: sonAnaliz.sinav_turu,
-            detaylar: sonAnaliz.detaylar,
-            toplamNet: sonAnaliz.toplam_net,
-            hataDefteriSorulari
-        });
-
-        if (!yorum) {
-            return res.status(503).json({ success: false, message: 'AI Koç şu an yanıt veremedi, birkaç dakika sonra tekrar dene.' });
-        }
-
-        await supabase.from('ai_yorumlari').insert({ user_id: user.id, analiz_id: sonAnaliz.id, yorum });
-
-        let odevSayisi = 0;
-        if (user.ai_onboarding_tamamlandi && user.sinif) {
-            try {
-                const sinifAytGerektirir = user.sinif === '11' || user.sinif === '12' || user.sinif === 'Mezun';
-                const { sinavTuru, dersler: izinliMufredat } = getMufredat(user.sinif, sinifAytGerektirir ? user.ayt_alani : undefined);
-
-                const examKey = sinavTuru === 'TYT+AYT' ? 'AYT' : sinavTuru; // TYT+AYT ise daha uzak olan AYT tarihini esas al
-                const sinavTarihi = EXAM_DATES[examKey] || EXAM_DATES.TYT;
-                const kalanGun = Math.max(0, Math.ceil((new Date(sinavTarihi) - new Date()) / 86400000));
-
-                const plan = await generateHomeworkPlan({
-                    sinif: user.sinif,
-                    sinavTuru,
-                    aytAlani: user.ayt_alani,
-                    hedef: user.hedef,
-                    kaynakSayilari: user.kaynak_sayilari || {},
-                    izinliMufredat,
-                    sinavTarihi,
-                    kalanGun,
-                    sonAnaliz,
-                    hataDefteriSorulari
-                });
-
-                if (plan && Array.isArray(plan.odevler)) {
-                    // Modelin döndürdüğü konuların gerçekten izin verilen
-                    // müfredatta olduğunu tekrar sunucu tarafında doğruluyoruz
-                    // (savunma katmanı - model kurala uymasa bile taşmasın).
-                    const izinliKonular = new Set(Object.values(izinliMufredat).flat());
-                    const satirlar = plan.odevler
-                        .filter(o => o && typeof o.ders === 'string' && Array.isArray(o.konular))
-                        .map(o => ({
-                            teacher_id: null,
-                            student_id: user.id,
-                            exam_type: sinavTuru,
-                            subject: o.ders,
-                            topics: o.konular.filter(k => izinliKonular.has(k)),
-                            question_count: Number.isFinite(Number(o.soru_sayisi)) ? Math.min(60, Math.max(1, Math.round(Number(o.soru_sayisi)))) : 10,
-                            date_assigned: new Date().toISOString(),
-                            status: 'pending',
-                            completed: false,
-                            source: 'ai'
-                        }))
-                        .filter(o => o.topics.length > 0);
-
-                    if (satirlar.length > 0) {
-                        await supabase.from('homeworks').insert(satirlar);
-                        odevSayisi = satirlar.length;
-                    }
-                }
-            } catch (planError) {
-                // Ödev planı üretimi başarısız olsa bile Faz 1 yorumu zaten
-                // kaydedildi - kullanıcı deneyimini bozmamak için sessizce
-                // logluyoruz, isteği hataya düşürmüyoruz.
-                console.error('[AI Koç] Ödev planı oluşturulamadı:', planError?.message || planError);
+        // Free: günde 5 mesaj. Premium: sınırsız.
+        if (user.level !== 'Premium') {
+            const gunBasi = new Date(); gunBasi.setHours(0, 0, 0, 0);
+            const { count } = await supabase.from('ai_mesajlar').select('id', { count: 'exact', head: true })
+                .eq('user_id', user.id).eq('rol', 'user').gte('tarih', gunBasi.toISOString());
+            if ((count || 0) >= 5) {
+                return res.status(403).json({ success: false, message: 'Free üyelikte günde 5 mesaj hakkın var. Sınırsız sohbet için Premium\'a geçebilirsin.', limitDoldu: true });
             }
         }
 
-        res.json({ success: true, yorum, odevSayisi });
+        await supabase.from('ai_mesajlar').insert({ user_id: user.id, rol: 'user', mesaj, okunmadi: false });
+
+        const { data: gecmisRaw } = await supabase.from('ai_mesajlar').select('rol, mesaj').eq('user_id', user.id).order('tarih', { ascending: true }).limit(21);
+        const mesajGecmisi = gecmisRaw || [];
+
+        const { data: sonAnalizler } = await supabase.from('analizler').select('sinav_turu, detaylar, toplam_net, tarih').eq('user_id', user.id).order('tarih', { ascending: false }).limit(5);
+
+        const { data: hataKayitlari } = await supabase.from('wrong_questions').select('subject').eq('user_id', user.id).not('subject', 'is', null);
+        const hataDefteriDersSayilari = {};
+        (hataKayitlari || []).forEach(h => { hataDefteriDersSayilari[h.subject] = (hataDefteriDersSayilari[h.subject] || 0) + 1; });
+
+        const sinifAytGerektirir = user.sinif === '11' || user.sinif === '12' || user.sinif === 'Mezun';
+        const izinliMufredat = user.sinif ? getMufredat(user.sinif, sinifAytGerektirir ? user.ayt_alani : undefined).dersler : null;
+
+        const sonuc = await generateChatReply({
+            mesajGecmisi,
+            profil: { sinif: user.sinif, ayt_alani: user.ayt_alani, hedef: user.hedef, kaynak_sayilari: user.kaynak_sayilari, tamamlanan_konular: user.tamamlanan_konular },
+            sonAnalizler: sonAnalizler || [],
+            hataDefteriDersSayilari,
+            izinliMufredat
+        });
+
+        if (!sonuc) {
+            return res.status(503).json({ success: false, message: 'AI Koç şu an yanıt veremedi, birkaç dakika sonra tekrar dene.' });
+        }
+
+        await supabase.from('ai_mesajlar').insert({ user_id: user.id, rol: 'ai', mesaj: sonuc.cevap, okunmadi: false });
+
+        // Profil güncellemelerini uygula (varsa) - mevcut kaynak/tamamlanan
+        // konu verisiyle MERGE edilir, üzerine yazılmaz.
+        const g = sonuc.guncellemeler || {};
+        const guncelleme = {};
+        let sinifYeniOgrenildi = false;
+        if (g.sinif && GECERLI_SINIFLAR.includes(g.sinif) && g.sinif !== user.sinif) {
+            guncelleme.sinif = g.sinif;
+            sinifYeniOgrenildi = !user.sinif;
+        }
+        if (g.ayt_alani && GECERLI_AYT_ALANLARI.includes(g.ayt_alani)) guncelleme.ayt_alani = g.ayt_alani;
+        if (g.hedef && typeof g.hedef === 'string') guncelleme.hedef = g.hedef.slice(0, 200);
+        let kaynakDegisti = false, tamamlananDegisti = false;
+        if (g.kaynak_guncellemeleri && typeof g.kaynak_guncellemeleri === 'object' && Object.keys(g.kaynak_guncellemeleri).length > 0) {
+            const yeniKaynak = { ...(user.kaynak_sayilari || {}) };
+            Object.entries(g.kaynak_guncellemeleri).forEach(([ders, sayi]) => {
+                const n = Number.parseInt(sayi, 10);
+                if (Number.isFinite(n) && n >= 0 && n <= 20) { yeniKaynak[ders] = n; kaynakDegisti = true; }
+            });
+            if (kaynakDegisti) guncelleme.kaynak_sayilari = yeniKaynak;
+        }
+        if (g.tamamlanan_konu_eklemeleri && typeof g.tamamlanan_konu_eklemeleri === 'object' && Object.keys(g.tamamlanan_konu_eklemeleri).length > 0) {
+            const yeniTamamlanan = { ...(user.tamamlanan_konular || {}) };
+            Object.entries(g.tamamlanan_konu_eklemeleri).forEach(([ders, konular]) => {
+                if (!Array.isArray(konular)) return;
+                const mevcut = new Set(yeniTamamlanan[ders] || []);
+                konular.forEach(k => { if (typeof k === 'string') mevcut.add(k); });
+                yeniTamamlanan[ders] = Array.from(mevcut);
+                tamamlananDegisti = true;
+            });
+            if (tamamlananDegisti) guncelleme.tamamlanan_konular = yeniTamamlanan;
+        }
+        if (Object.keys(guncelleme).length > 0) {
+            if (guncelleme.sinif) guncelleme.ai_onboarding_tamamlandi = true;
+            await supabase.from('profiles').update(guncelleme).eq('id', user.id);
+        }
+
+        res.json({ success: true, cevap: sonuc.cevap });
+
+        // Ödev planı arka planda yenilenir (kullanıcıyı beklet meden) -
+        // sadece sınıf ilk kez öğrenildiyse ya da kaynak/tamamlanan konu
+        // değiştiyse tetiklenir. Sınıf hâlâ bilinmiyorsa hiç tetiklenmez -
+        // "bilinmiyorsa TYT varsay" gibi riskli bir tahmine güvenmiyoruz.
+        const guncelSinifKontrol = guncelleme.sinif || user.sinif;
+        if ((sinifYeniOgrenildi || kaynakDegisti || tamamlananDegisti) && guncelSinifKontrol) {
+            const guncelSinif = guncelSinifKontrol;
+            const guncelAytAlani = guncelleme.ayt_alani || user.ayt_alani;
+            const guncelKaynak = guncelleme.kaynak_sayilari || user.kaynak_sayilari || {};
+            const guncelTamamlanan = guncelleme.tamamlanan_konular || user.tamamlanan_konular || {};
+            const guncelHedef = guncelleme.hedef || user.hedef;
+            (async () => {
+                try {
+                    const yineAytGerektirir = guncelSinif === '11' || guncelSinif === '12' || guncelSinif === 'Mezun';
+                    const { sinavTuru, dersler: izinliMufredat2 } = getMufredat(guncelSinif, yineAytGerektirir ? guncelAytAlani : undefined);
+                    const examKey = sinavTuru === 'TYT+AYT' ? 'AYT' : sinavTuru;
+                    const sinavTarihi = EXAM_DATES[examKey] || EXAM_DATES.TYT;
+                    const kalanGun = Math.max(0, Math.ceil((new Date(sinavTarihi) - new Date()) / 86400000));
+
+                    const plan = await generateHomeworkPlan({
+                        sinif: guncelSinif, sinavTuru, aytAlani: guncelAytAlani, hedef: guncelHedef,
+                        kaynakSayilari: guncelKaynak, tamamlananKonular: guncelTamamlanan,
+                        izinliMufredat: izinliMufredat2, sinavTarihi, kalanGun,
+                        sonAnalizler: sonAnalizler || [], hataDefteriDersSayilari
+                    });
+
+                    if (plan && Array.isArray(plan.odevler)) {
+                        const izinliKonular = new Set(Object.values(izinliMufredat2).flat());
+                        const satirlar = plan.odevler
+                            .filter(o => o && typeof o.ders === 'string' && Array.isArray(o.konular))
+                            .map(o => ({
+                                teacher_id: null, student_id: user.id, exam_type: sinavTuru, subject: o.ders,
+                                topics: o.konular.filter(k => izinliKonular.has(k)),
+                                question_count: Number.isFinite(Number(o.soru_sayisi)) ? Math.min(60, Math.max(1, Math.round(Number(o.soru_sayisi)))) : 10,
+                                date_assigned: new Date().toISOString(), status: 'pending', completed: false, source: 'ai'
+                            }))
+                            .filter(o => o.topics.length > 0);
+
+                        if (satirlar.length > 0) {
+                            // Tamamlanmamış eski AI ödevlerini temizleyip yenisini
+                            // ekliyoruz - tamamlanmış (completed=true) olanlara dokunulmuyor.
+                            await supabase.from('homeworks').delete().eq('student_id', user.id).eq('source', 'ai').eq('completed', false);
+                            await supabase.from('homeworks').insert(satirlar);
+                        }
+                    }
+                } catch (planError) {
+                    console.error('[AI Koç] Ödev planı oluşturulamadı:', planError?.message || planError);
+                }
+            })();
+        }
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
@@ -1832,7 +1815,7 @@ app.post('/api/wrong-questions/add', async (req, res) => {
             }
         }
 
-        const { question_text, ai_solution, image_base64 } = req.body;
+        const { question_text, subject, ai_solution, image_base64 } = req.body;
         // İstemci fotoğrafı zaten küçültüp sıkıştırıyor ama yine de bir
         // güvenlik ağı olarak burada da makul bir üst sınır kontrol
         // ediyoruz - aksi halde kullanıcı genel bir 500 hatası görür,
@@ -1843,11 +1826,43 @@ app.post('/api/wrong-questions/add', async (req, res) => {
         const { data: newQuestion, error: qError } = await supabase.from('wrong_questions').insert({
             user_id: user.id,
             question_text: question_text || 'Hatalı Soru Kaydı',
+            subject: subject || null,
             ai_solution: ai_solution || '',
             image_base64: image_base64 || '',
             tarih: new Date().toISOString()
         }).select('id').single();
         if (qError) throw qError;
+
+        // AI Koç - tepkisel farkındalık: öğrenci normalde GÜÇLÜ olduğu bir
+        // derste yeni bir hata eklerse, sohbet ekranı bir dahaki açılışında
+        // görsün diye proaktif bir mesaj kuyruğa alınıyor. Ekstra bir Gemini
+        // çağrısı gerektirmiyor - şablon yeterli, hız/maliyet katmıyor.
+        if (subject) {
+            (async () => {
+                try {
+                    const { data: sonAnaliz } = await supabase.from('analizler').select('sinav_turu, detaylar').eq('user_id', user.id).order('tarih', { ascending: false }).limit(1).maybeSingle();
+                    if (!sonAnaliz) return;
+                    const alanlar = NET_ALANLARI[sonAnaliz.sinav_turu] || [];
+                    // detaylar'daki alan id'leri ile subject adını eşleştirmek
+                    // için NET_ALANLARI'ndaki label'ı subject ile karşılaştırıyoruz.
+                    const alan = alanlar.find(a => a.label === subject || subject.startsWith(a.label));
+                    if (!alan) return;
+                    const netDegeri = Number(sonAnaliz.detaylar?.[alan.id]);
+                    if (!Number.isFinite(netDegeri)) return;
+                    const yuzde = (netDegeri / alan.max) * 100;
+                    if (yuzde >= 65) {
+                        await supabase.from('ai_mesajlar').insert({
+                            user_id: user.id,
+                            rol: 'ai',
+                            mesaj: `Normalde iyi olduğun ${subject} dersinde bugün hata defterine bir kayıt daha eklemişsin. Bir bakalım - orada tam olarak ne oldu, tesadüf mü yoksa gözden kaçırdığın bir konu mu var?`,
+                            okunmadi: true
+                        });
+                    }
+                } catch (bgError) {
+                    console.error('[AI Koç] Anomali tespiti hatası:', bgError?.message || bgError);
+                }
+            })();
+        }
 
         res.json({ success: true, id: newQuestion.id });
     } catch (e) {
@@ -2217,7 +2232,7 @@ function adminShell(activeTab, bodyHtml, stats) {
 app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
     try {
         const [{ data: profiles }, { data: analizler }, { data: wrongQs }] = await Promise.all([
-            supabase.from('profiles').select('id, ad, email, role, level, kayit_tarihi').order('kayit_tarihi', { ascending: false }),
+            supabase.from('profiles').select('id, ad, email, role, level, kayit_tarihi, sinif, ayt_alani, hedef, kaynak_sayilari, tamamlanan_konular').order('kayit_tarihi', { ascending: false }),
             supabase.from('analizler').select('user_id'),
             supabase.from('wrong_questions').select('user_id')
         ]);
@@ -2230,6 +2245,13 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
         const rows = (profiles || []).map(p => {
             const yeniSeviye = p.level === 'Premium' ? 'Free' : 'Premium';
             const yeniRol = p.role === 'teacher' ? 'student' : 'teacher';
+            // AI Koç'un öğrenciden topladığı bilgiyi tek bakışta görebilmek
+            // için - Supabase Table Editor'e girmeden hızlı destek/debug.
+            const aiKocDetay = {
+                sinif: p.sinif || null, ayt_alani: p.ayt_alani || null, hedef: p.hedef || null,
+                kaynak_sayilari: p.kaynak_sayilari || {}, tamamlanan_konular: p.tamamlanan_konular || {}
+            };
+            const aiKocTitle = escapeHtml(JSON.stringify(aiKocDetay, null, 1));
             return `
             <tr>
                 <td>${escapeHtml(p.ad || '-')}</td>
@@ -2239,6 +2261,7 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
                 <td>${p.kayit_tarihi ? new Date(p.kayit_tarihi).toLocaleDateString('tr-TR') : '-'}</td>
                 <td class="text-center">${analizSayaci[p.id] || 0}</td>
                 <td class="text-center">${hataSayaci[p.id] || 0}</td>
+                <td class="text-center" title="${aiKocTitle}">${p.sinif ? `<span class="badge bg-info text-dark" style="cursor:help;">${escapeHtml(p.sinif)}</span>` : '<span class="text-secondary">-</span>'}</td>
                 <td class="d-flex flex-wrap gap-1">
                     <form method="POST" action="/admin/set-level">
                         <input type="hidden" name="userId" value="${escapeHtml(p.id)}">
@@ -2271,10 +2294,11 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
                             <th>Kayıt Tarihi</th>
                             <th class="text-center">Analiz Sayısı</th>
                             <th class="text-center">Hata Defteri</th>
+                            <th class="text-center" title="Fareyle üzerine gelince AI Koç'ta topladığı tüm bilgiyi gösterir">AI Koç</th>
                             <th>İşlemler</th>
                         </tr>
                     </thead>
-                    <tbody>${rows || '<tr><td colspan="8" class="text-center text-secondary">Henüz kullanıcı yok.</td></tr>'}</tbody>
+                    <tbody>${rows || '<tr><td colspan="9" class="text-center text-secondary">Henüz kullanıcı yok.</td></tr>'}</tbody>
                 </table>
             </div>`;
 
