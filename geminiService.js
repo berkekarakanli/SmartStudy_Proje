@@ -19,21 +19,38 @@ if (!apiKey) {
 }
 
 /**
- * Gemini'nin ücretsiz katmanı dakika başına düşük bir istek sınırına sahip
- * (429 / RESOURCE_EXHAUSTED). Yoğun anlarda (birden fazla öğrenci aynı
- * dakikada mesaj atarsa) bu sınıra takılmak mümkün - bunun için kısa bir
- * bekleme sonrası bir kez daha deniyoruz, kullanıcıya gereksiz yere hata
- * göstermemek için.
+ * Gemini'nin ücretsiz katmanı düşük bir istek sınırına sahip (429 /
+ * RESOURCE_EXHAUSTED) ve bazen "şu an yoğunluk var" diye 503/UNAVAILABLE
+ * dönebiliyor - ikisi de genelde birkaç saniye içinde kendiliğinden
+ * geçen GEÇİCİ durumlar. Google'ın kendi hata mesajı çoğu zaman "şu kadar
+ * saniye sonra tekrar dene" (retryDelay) bilgisini içeriyor - tahmine
+ * dayalı sabit bir süre yerine gerçekten SÖYLENEN süreyi bekliyoruz.
  */
-async function generateWithRetry(params, retries = 1, delayMs = 2000) {
+function retryDelayMsCikar(error) {
+    try {
+        const detaylar = error?.error?.details || error?.details || [];
+        const retryInfo = detaylar.find(d => String(d['@type'] || '').includes('RetryInfo'));
+        const ham = retryInfo?.retryDelay; // örn. "13s"
+        if (typeof ham === 'string') {
+            const saniye = Number.parseFloat(ham.replace('s', ''));
+            if (Number.isFinite(saniye)) return Math.ceil(saniye * 1000);
+        }
+    } catch (_) { /* parse edilemezse aşağıdaki varsayılana düşer */ }
+    return null;
+}
+
+async function generateWithRetry(params, retries = 2, varsayilanDelayMs = 3000) {
     try {
         return await ai.models.generateContent(params);
     } catch (error) {
         const mesaj = String(error?.message || error);
-        const oranSiniriMi = error?.error?.code === 429 || /429|RESOURCE_EXHAUSTED/i.test(mesaj);
-        if (oranSiniriMi && retries > 0) {
-            await new Promise(r => setTimeout(r, delayMs));
-            return generateWithRetry(params, retries - 1, delayMs * 2);
+        const kod = error?.error?.code ?? error?.code;
+        const tekrarDenenebilir = kod === 429 || kod === 503 || /429|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand/i.test(mesaj);
+        if (tekrarDenenebilir && retries > 0) {
+            const gercekBekleme = retryDelayMsCikar(error);
+            const bekleme = Math.min(gercekBekleme ?? varsayilanDelayMs, 15000) + 500; // küçük bir tampon pay
+            await new Promise(r => setTimeout(r, bekleme));
+            return generateWithRetry(params, retries - 1, varsayilanDelayMs * 2);
         }
         throw error;
     }
