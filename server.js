@@ -1886,8 +1886,91 @@ app.post('/destek', sensitiveActionLimiter, async (req, res) => {
     }
 });
 
+// ==========================================
+// 10. ADMİN PANELİ (SADECE KURUCU)
+// ==========================================
+// Kim üye olmuş, kaç analiz/hata defteri kaydı girmiş gibi genel bir bakış
+// için basit, salt-okunur bir panel. Sadece ADMIN_EMAIL ile eşleşen
+// hesaba giriş yapmış kullanıcı görebiliyor - ayrı bir "admin" rolü/kolonu
+// eklemeye şimdilik gerek yok, tek yönetici (kurucu) olduğu için.
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'berkekarakanli6@gmail.com').toLowerCase();
+
+async function requireAdmin(req, res, next) {
+    const user = await currentUser(req);
+    if (!user || String(user.email || '').toLowerCase() !== ADMIN_EMAIL) {
+        return res.status(404).send(errorPage('Sayfa Bulunamadı', 'Aradığınız rota mevcut değil.', '/dashboard'));
+    }
+    req.currentUser = user;
+    next();
+}
+
+app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
+    try {
+        const [{ data: profiles }, { data: analizler }, { data: wrongQs }] = await Promise.all([
+            supabase.from('profiles').select('id, ad, email, role, level, kayit_tarihi').order('kayit_tarihi', { ascending: false }),
+            supabase.from('analizler').select('user_id'),
+            supabase.from('wrong_questions').select('user_id')
+        ]);
+
+        const analizSayaci = {};
+        for (const a of (analizler || [])) analizSayaci[a.user_id] = (analizSayaci[a.user_id] || 0) + 1;
+        const hataSayaci = {};
+        for (const w of (wrongQs || [])) hataSayaci[w.user_id] = (hataSayaci[w.user_id] || 0) + 1;
+
+        const rows = (profiles || []).map(p => `
+            <tr>
+                <td>${escapeHtml(p.ad || '-')}</td>
+                <td>${escapeHtml(p.email || '-')}</td>
+                <td><span class="badge ${p.role === 'teacher' ? 'bg-warning text-dark' : 'bg-info text-dark'}">${p.role === 'teacher' ? 'Öğretmen' : 'Öğrenci'}</span></td>
+                <td><span class="badge ${p.level === 'Premium' ? 'bg-success' : 'bg-secondary'}">${escapeHtml(p.level || 'Free')}</span></td>
+                <td>${p.kayit_tarihi ? new Date(p.kayit_tarihi).toLocaleDateString('tr-TR') : '-'}</td>
+                <td class="text-center">${analizSayaci[p.id] || 0}</td>
+                <td class="text-center">${hataSayaci[p.id] || 0}</td>
+            </tr>
+        `).join('');
+
+        res.send(`
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head>
+            <meta charset="UTF-8">
+            <title>Admin Paneli - SmartStudy</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        </head>
+        <body class="bg-dark text-white p-4">
+            <div class="container-fluid">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1 class="h3 m-0">Admin Paneli</h1>
+                    <a href="/dashboard" class="btn btn-outline-info btn-sm">Panele Dön</a>
+                </div>
+                <p class="text-secondary">Toplam kullanıcı: <strong>${(profiles || []).length}</strong> · Toplam analiz: <strong>${(analizler || []).length}</strong> · Toplam hata defteri kaydı: <strong>${(wrongQs || []).length}</strong></p>
+                <div class="table-responsive">
+                    <table class="table table-dark table-striped table-hover align-middle">
+                        <thead>
+                            <tr>
+                                <th>Ad</th>
+                                <th>E-Posta</th>
+                                <th>Rol</th>
+                                <th>Seviye</th>
+                                <th>Kayıt Tarihi</th>
+                                <th class="text-center">Analiz Sayısı</th>
+                                <th class="text-center">Hata Defteri</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows || '<tr><td colspan="7" class="text-center text-secondary">Henüz kullanıcı yok.</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>
+        </body>
+        </html>`);
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Sunucu Hatası', 'Admin paneli yüklenemedi.', '/dashboard'));
+    }
+});
+
 app.use((req, res) => {
-    res.status(404).send(errorPage('Sayfa Bulunamadı', 'Aradığınız rota mevcut değil.', '/dashboard')); 
+    res.status(404).send(errorPage('Sayfa Bulunamadı', 'Aradığınız rota mevcut değil.', '/dashboard'));
 });
 
 app.listen(PORT, () => { 
