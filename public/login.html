@@ -165,9 +165,12 @@
                     <span class="input-group-text eye-toggle" onclick="togglePassword()"><i class="fas fa-eye" id="eyeIcon"></i></span>
                 </div>
             </div>
-            <div class="form-check mb-4">
-                <input class="form-check-input" type="checkbox" id="rememberMe">
-                <label class="form-check-label small text-secondary" for="rememberMe">Beni hatırla (bu cihazda daha uzun oturum)</label>
+            <div class="form-check mb-4 d-flex justify-content-between align-items-center">
+                <div>
+                    <input class="form-check-input" type="checkbox" id="rememberMe">
+                    <label class="form-check-label small text-secondary" for="rememberMe">Beni hatırla</label>
+                </div>
+                <a href="/forgot-password" class="small text-info text-decoration-none">Şifremi Unuttum</a>
             </div>
             <button type="submit" class="btn-access orbitron" id="loginBtn">Giriş Yap</button>
         </form>
@@ -300,6 +303,24 @@
                 btn.disabled = false;
             }
         }
+
+        // Kayıt sırasında gönderilen doğrulama maili tıklanınca Supabase,
+        // e-postayı kendi tarafında onaylayıp tarayıcıyı buraya
+        // (/login?verified=1) yönlendiriyor. Kimlik bilgileri adresin #
+        // (hash) kısmında geliyor, biz onu hiç kullanmıyoruz (kendi
+        // session/cookie sistemimiz ayrı) - sadece temizliyoruz ki
+        // kullanıcı adres çubuğunda uzun bir token görmesin.
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('verified') === '1') {
+                showToast('E-postan başarıyla doğrulandı! Şimdi giriş yapabilirsin.', 'success');
+            } else if (window.location.hash.includes('error=')) {
+                showToast('Doğrulama bağlantısının süresi dolmuş veya geçersiz. Kayıt ol/giriş yap sayfasından tekrar dene.', 'error');
+            }
+            if (window.location.hash) {
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+        })();
     </script>
 
 </body>

@@ -43,6 +43,10 @@ const { supabase, supabaseAuthClient } = require('./supabaseClient');
 
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'smartstudy-dev-secret-change-me';
+// E-posta doğrulama ve şifre sıfırlama linklerinin yönlendirileceği adres.
+// Render'da PUBLIC_URL tanımlı değilse canlı adrese, o da yoksa yerel
+// geliştirme adresine düşer.
+const PUBLIC_URL = process.env.PUBLIC_URL || 'https://smartstudy-proje.onrender.com';
 
 // express.json()'ın varsayılan gövde limiti 100kb - hata defterine bir
 // fotoğraf base64 olarak eklenirken (gerçek bir telefon fotoğrafı kolayca
@@ -224,7 +228,28 @@ function errorPage(title, message, backUrl = '/') {
     </html>`;
 }
 
-function parseNet(value) { 
+// errorPage'in aynısı ama yeşil/olumlu vurguyla - kayıt sonrası "e-postanı
+// doğrula" gibi hata olmayan ama bilgilendirici mesajlar için.
+function infoPage(title, message, backUrl = '/') {
+    return `
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <title>${escapeHtml(title)}</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
+        <main class="text-center p-4">
+            <h1 class="text-info mb-3">${escapeHtml(title)}</h1>
+            <p class="text-white-50">${escapeHtml(message)}</p>
+            <a class="btn btn-outline-info mt-3" href="${escapeHtml(backUrl)}">Giriş Sayfasına Git</a>
+        </main>
+    </body>
+    </html>`;
+}
+
+function parseNet(value) {
     const net = Number(value); 
     return Number.isFinite(net) ? net : NaN; 
 }
@@ -466,20 +491,38 @@ app.post('/register', registerLimiter, async (req, res) => {
         // tablosundaki karşılık gelen satır, veritabanındaki bir tetikleyici
         // (handle_new_user) tarafından OTOMATİK oluşturuluyor - biz sadece
         // koc_kodu ve referred_by gibi ekstra alanları sonradan güncelliyoruz.
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        //
+        // ÖNEMLİ: admin.createUser() DEĞİL, bilinçli olarak PUBLIC signUp()
+        // kullanıyoruz (anon anahtarlı supabaseAuthClient üzerinden) - sadece
+        // signUp(), Supabase'in Authentication > Emails kısmında az önce SMTP
+        // (Gmail) ayarını yaptığımız "Confirm sign up" e-postasını OTOMATİK
+        // gönderiyor. admin.createUser() bunu tetiklemiyor, sessizce
+        // email_confirm bayrağını set eder ama mail atmaz.
+        const { data: authData, error: authError } = await supabaseAuthClient.auth.signUp({
             email,
             password: sifre,
-            email_confirm: true,
-            user_metadata: { ad, role, kvkk_onay: kvkkOnayVerildi, sozlesme_onay: sozlesmeOnayVerildi }
+            options: {
+                data: { ad, role, kvkk_onay: kvkkOnayVerildi, sozlesme_onay: sozlesmeOnayVerildi },
+                emailRedirectTo: `${PUBLIC_URL}/login?verified=1`
+            }
         });
 
         if (authError) {
-            const isDuplicate = authError.code === 'email_exists' || /already.*registered/i.test(authError.message || '');
-            const msg = isDuplicate ? 'Bu e-posta sistemde zaten kayıtlı.' : 'Kayıt işlemi sırasında hata oluştu.';
-            const status = isDuplicate ? 409 : 500;
-            if (!isDuplicate) console.error(authError);
-            if (wantsJson(req)) return res.status(status).json({ success: false, message: msg });
-            return res.status(status).send(errorPage('Kayıt Hatası', msg, '/register'));
+            console.error(authError);
+            const msg = 'Kayıt işlemi sırasında hata oluştu.';
+            if (wantsJson(req)) return res.status(500).json({ success: false, message: msg });
+            return res.status(500).send(errorPage('Sunucu Hatası', msg, '/register'));
+        }
+
+        // Supabase, e-posta numaralandırma saldırılarını önlemek için, zaten
+        // kayıtlı+doğrulanmış bir e-postayla signUp() çağrılınca hata
+        // DÖNDÜRMÜYOR - bunun yerine user.identities dizisini boş bırakıyor.
+        // "Zaten kayıtlı" kontrolünü bu yüzden böyle yapıyoruz.
+        const isDuplicate = authData.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0;
+        if (isDuplicate) {
+            const msg = 'Bu e-posta sistemde zaten kayıtlı.';
+            if (wantsJson(req)) return res.status(409).json({ success: false, message: msg });
+            return res.status(409).send(errorPage('Kayıt Hatası', msg, '/register'));
         }
 
         const newUserId = authData.user.id;
@@ -499,9 +542,20 @@ app.post('/register', registerLimiter, async (req, res) => {
         }
 
         if (wantsJson(req)) {
-            return res.json({ success: true, userId: newUserId, id: newUserId, role });
+            return res.json({
+                success: true,
+                userId: newUserId,
+                id: newUserId,
+                role,
+                emailConfirmationRequired: true,
+                message: `${email} adresine bir doğrulama bağlantısı gönderdik. Giriş yapmadan önce e-postanı doğrulaman gerekiyor.`
+            });
         }
-        res.redirect('/login');
+        res.send(infoPage(
+            'E-Postanı Doğrula',
+            `${email} adresine bir doğrulama bağlantısı gönderdik. Gelen kutunu (bulamazsan spam/gereksiz klasörünü) kontrol edip bağlantıya tıkladıktan sonra giriş yapabilirsin.`,
+            '/login'
+        ));
     } catch (error) {
         console.error(error);
         const msg = 'Kayıt işlemi sırasında hata oluştu.';
@@ -517,9 +571,19 @@ app.post('/login', loginLimiter, async (req, res) => {
         const requestedRole = req.body.requestedRole;
 
         // Şifre doğrulaması artık Supabase Auth'ta yapılıyor - kendi
-        // pbkdf2/hashPassword mantığımıza hiç gerek kalmadı.
+        // pbkdf2/hashPassword mantığımıza hiç gerek kalmadı. E-postasını
+        // henüz doğrulamamış kullanıcılar için Supabase kendi tarafında
+        // girişi zaten reddediyor ("Email not confirmed" hatası) - biz
+        // sadece bu durumu kullanıcının anlayacağı bir mesaja çeviriyoruz.
         const { data: signInData, error: signInError } = await supabaseAuthClient.auth.signInWithPassword({ email, password: sifre });
         if (signInError || !signInData.user) {
+            if (signInError && /email.*not.*confirmed/i.test(signInError.message || '')) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'E-postanı henüz doğrulamadın. Kayıt olurken gönderdiğimiz bağlantıya tıklamadan giriş yapamazsın.',
+                    emailNotConfirmed: true
+                });
+            }
             return res.status(401).json({ success: false, message: 'E-Posta veya şifre hatalı.' });
         }
 
@@ -543,6 +607,129 @@ app.post('/login', loginLimiter, async (req, res) => {
         console.error(error);
         res.status(500).json({ success: false, message: 'Sunucu bağlantı hatası.' });
     }
+});
+
+// ==========================================
+// 5B. ŞİFREMİ UNUTTUM
+// ==========================================
+// Basit bir HTML form döndüren yardımcı - errorPage/infoPage ile aynı stil,
+// ayrı bir .html şablonu oluşturmaya gerek kalmasın diye burada satır içi.
+function forgotPasswordForm(message) {
+    return `
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <title>Şifremi Unuttum</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
+        <main class="text-center p-4" style="max-width: 420px;">
+            <h1 class="h3 mb-3">Şifremi Unuttum</h1>
+            <p class="text-white-50">Kayıtlı e-posta adresini gir, sana bir şifre sıfırlama bağlantısı gönderelim.</p>
+            ${message ? `<div class="alert alert-info">${escapeHtml(message)}</div>` : ''}
+            <form method="POST" action="/forgot-password" class="d-flex flex-column gap-2">
+                <input type="email" name="email" class="form-control" placeholder="E-posta adresin" required>
+                <button type="submit" class="btn btn-info text-dark fw-bold">Bağlantı Gönder</button>
+            </form>
+            <a class="btn btn-outline-secondary mt-3" href="/login">Giriş Sayfasına Dön</a>
+        </main>
+    </body>
+    </html>`;
+}
+
+app.get('/forgot-password', (req, res) => {
+    res.send(forgotPasswordForm());
+});
+
+app.post('/forgot-password', sensitiveActionLimiter, async (req, res) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    if (email) {
+        // Hata olsa bile kullanıcıya her zaman aynı mesajı gösteriyoruz -
+        // aksi halde "bu e-posta kayıtlı mı değil mi" bilgisini dışarıya
+        // sızdırmış (email enumeration) oluruz.
+        try {
+            await supabaseAuthClient.auth.resetPasswordForEmail(email, {
+                redirectTo: `${PUBLIC_URL}/reset-password`
+            });
+        } catch (error) {
+            console.error(error);
+        }
+    }
+    res.send(infoPage(
+        'Bağlantı Gönderildi',
+        'Bu e-posta sistemde kayıtlıysa, şifre sıfırlama bağlantısını içeren bir mail gönderdik. Gelen kutunu (ve spam klasörünü) kontrol et.',
+        '/login'
+    ));
+});
+
+// Supabase'in şifre sıfırlama linki tarayıcıyı buraya, kimlik doğrulama
+// bilgilerini adresin # (hash) kısmında taşıyarak yönlendiriyor - bu kısım
+// sunucuya hiç gitmiyor, sadece tarayıcıda görünüyor. Bu yüzden yeni şifreyi
+// almak için sunucu tarafı değil, sayfanın içindeki JavaScript (supabase-js
+// ile) kullanılıyor; anon anahtar burada güvenle kullanılabilir çünkü zaten
+// tarayıcı tarafında açık/genel kullanım için tasarlanmış bir anahtar.
+app.get('/reset-password', (req, res) => {
+    res.send(`
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <title>Yeni Şifre Belirle</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
+        <main class="text-center p-4" style="max-width: 420px; width: 100%;">
+            <h1 class="h3 mb-3">Yeni Şifre Belirle</h1>
+            <div id="status" class="alert alert-info">Bağlantı doğrulanıyor...</div>
+            <form id="resetForm" class="d-flex flex-column gap-2 d-none">
+                <input type="password" id="newPassword" class="form-control" placeholder="Yeni şifre (en az 6 karakter)" minlength="6" required>
+                <button type="submit" class="btn btn-info text-dark fw-bold">Şifreyi Güncelle</button>
+            </form>
+            <a class="btn btn-outline-secondary mt-3" href="/login">Giriş Sayfasına Dön</a>
+        </main>
+        <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+        <script>
+            const supabaseClient = window.supabase.createClient(
+                ${JSON.stringify(process.env.SUPABASE_URL)},
+                ${JSON.stringify(process.env.SUPABASE_ANON_KEY)}
+            );
+            const statusEl = document.getElementById('status');
+            const formEl = document.getElementById('resetForm');
+
+            supabaseClient.auth.onAuthStateChange((event, session) => {
+                if (event === 'PASSWORD_RECOVERY') {
+                    statusEl.classList.add('d-none');
+                    formEl.classList.remove('d-none');
+                }
+            });
+
+            // Sayfa yenilenirse veya olay kaçırılırsa, mevcut oturuma bak.
+            setTimeout(async () => {
+                const { data } = await supabaseClient.auth.getSession();
+                if (data.session && formEl.classList.contains('d-none')) {
+                    statusEl.classList.add('d-none');
+                    formEl.classList.remove('d-none');
+                } else if (!data.session && statusEl && !statusEl.classList.contains('d-none')) {
+                    statusEl.textContent = 'Bağlantı geçersiz veya süresi dolmuş. Şifremi Unuttum sayfasından yeni bir bağlantı iste.';
+                    statusEl.classList.replace('alert-info', 'alert-warning');
+                }
+            }, 2500);
+
+            formEl.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const newPassword = document.getElementById('newPassword').value;
+                const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+                if (error) {
+                    alert('Şifre güncellenemedi: ' + error.message);
+                    return;
+                }
+                alert('Şifren güncellendi, şimdi giriş yapabilirsin.');
+                window.location.href = '/login';
+            });
+        </script>
+    </body>
+    </html>`);
 });
 
 // ==========================================
