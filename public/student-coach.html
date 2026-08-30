@@ -19,6 +19,21 @@
         .chat-bubble.ai{ align-self:flex-start; background:#0f172a; border:1px solid rgba(13,202,240,.35); border-bottom-left-radius:4px; }
         .chat-bubble.user{ align-self:flex-end; background:#0dcaf0; color:#04202b; border-bottom-right-radius:4px; }
         .chat-bubble.ai.unread{ border-color:#ffc107; box-shadow:0 0 0 1px rgba(255,193,7,.35); }
+
+        .premium-card{ background:linear-gradient(160deg, rgba(30,41,59,.85), rgba(15,23,42,.95)); border-radius:14px; padding:20px; margin-bottom:24px; position:relative; overflow:hidden; }
+        .premium-card::before{ content:''; position:absolute; top:0; left:0; bottom:0; width:4px; }
+        .premium-card .card-title-row{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+        .premium-card .icon-badge{ width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; flex-shrink:0; }
+
+        .premium-card--amber{ border:1px solid rgba(245,158,11,.3); box-shadow:0 0 24px -12px rgba(245,158,11,.35); }
+        .premium-card--amber::before{ background:linear-gradient(180deg,#f59e0b,#b45309); }
+        .premium-card--amber .icon-badge{ background:rgba(245,158,11,.12); color:#fbbf24; border:1px solid rgba(245,158,11,.3); }
+        .premium-card--amber .card-title-row h6{ color:#fbbf24; }
+
+        .premium-card--cyan{ border:1px solid rgba(13,202,240,.3); box-shadow:0 0 24px -12px rgba(13,202,240,.4); }
+        .premium-card--cyan::before{ background:linear-gradient(180deg,#22d3ee,#0e7490); }
+        .premium-card--cyan .icon-badge{ background:rgba(13,202,240,.12); color:#22d3ee; border:1px solid rgba(13,202,240,.3); }
+        .premium-card--cyan .card-title-row h6{ color:#22d3ee; }
     </style>
 </head>
 <body>
@@ -33,8 +48,11 @@
             </div>
         </div>
 
-        <div class="card bg-dark border-secondary p-3 mb-4">
-            <h6 class="text-secondary orbitron mb-3">Eğitim Koçlarım (<%= kocListesi.length %>)</h6>
+        <div class="premium-card premium-card--amber">
+            <div class="card-title-row">
+                <div class="icon-badge"><i class="fas fa-user-tie"></i></div>
+                <h6 class="orbitron mb-0">Eğitim Koçlarım (<%= kocListesi.length %>)</h6>
+            </div>
             <% if (kocListesi.length > 0) { %>
                 <% kocListesi.forEach(c => { %>
                     <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary">
@@ -50,13 +68,16 @@
             <% } %>
             <p class="text-secondary small mt-3 mb-2">Başka bir koçla eşleşmek için kod gir:</p>
             <form action="/set-coach" method="POST" class="d-flex gap-2">
-                <input type="text" name="coachCode" class="form-control form-control-sm bg-dark text-secondary border-secondary" placeholder="KOC-XXXXX" required>
-                <button type="submit" class="btn btn-outline-secondary btn-sm fw-bold">Ekle</button>
+                <input type="text" name="coachCode" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="KOC-XXXXX" required>
+                <button type="submit" class="btn btn-sm fw-bold" style="background:#f59e0b; color:#1a1206; border:none;">Ekle</button>
             </form>
         </div>
 
-        <div class="card bg-dark border-info p-3 mb-4" id="ai-koc">
-            <h6 class="text-info orbitron mb-3"><i class="fas fa-brain me-2"></i>AI Koç</h6>
+        <div class="premium-card premium-card--cyan" id="ai-koc">
+            <div class="card-title-row">
+                <div class="icon-badge"><i class="fas fa-brain"></i></div>
+                <h6 class="orbitron mb-0">AI Koç</h6>
+            </div>
             <p class="text-secondary small mb-3">Sınıfına, hedefine ve deneme sonuçlarına göre seninle sohbet eder, gerektiğinde ödev planını kendiliğinden günceller.</p>
 
             <div id="chatScroll" class="chat-scroll mb-3">
