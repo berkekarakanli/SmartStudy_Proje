@@ -236,3 +236,22 @@ $$ language plpgsql security definer;
 create trigger on_auth_user_created
     after insert on auth.users
     for each row execute procedure public.handle_new_user();
+
+-- ==========================================
+-- ADMIN_LOG (admin panelindeki işlemlerin denetim kaydı)
+-- ==========================================
+-- Admin panelinden Premium/Free değiştirme, rol değiştirme, hesap silme
+-- gibi işlemler yapıldığında buraya bir satır ekleniyor - "yanlışlıkla
+-- birini sildim" gibi durumlarda geriye dönük bakabilmek için.
+create table public.admin_log (
+    id uuid primary key default gen_random_uuid(),
+    admin_email text not null,
+    islem text not null,
+    hedef_email text,
+    detay text,
+    tarih timestamptz not null default now()
+);
+
+create index idx_admin_log_tarih on public.admin_log(tarih);
+
+alter table public.admin_log enable row level security;

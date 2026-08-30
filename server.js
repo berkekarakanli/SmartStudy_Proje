@@ -1956,8 +1956,21 @@ async function requireAdmin(req, res, next) {
     next();
 }
 
+// Admin panelindeki değişiklikleri kaydediyoruz - "kim, ne zaman, neyi
+// değiştirdi" sorusuna cevap verebilmek için. Loglama başarısız olsa bile
+// asıl işlemi (silme, seviye değiştirme vb.) engellemesin diye hatasını
+// sadece konsola yazıyoruz, isteğe hiç yansıtmıyoruz.
+async function logAdminAction(adminEmail, islem, hedefEmail, detay) {
+    try {
+        await supabase.from('admin_log').insert({ admin_email: adminEmail, islem, hedef_email: hedefEmail || null, detay: detay || null });
+    } catch (error) {
+        console.error('[ADMIN_LOG]', error);
+    }
+}
+
 // Admin sayfaları ortak kabuğu - üstte sekme (Kullanıcılar / Destek
-// Talepleri) navigasyonu olan, koyu temalı basit bir yönetim arayüzü.
+// Talepleri / İşlem Kayıtları) navigasyonu olan, koyu temalı basit bir
+// yönetim arayüzü.
 function adminShell(activeTab, bodyHtml, stats) {
     return `
     <!DOCTYPE html>
@@ -1982,6 +1995,9 @@ function adminShell(activeTab, bodyHtml, stats) {
                 </li>
                 <li class="nav-item">
                     <a class="nav-link ${activeTab === 'destek' ? 'active bg-secondary text-white' : 'text-secondary'}" href="/admin/destek">Destek Talepleri</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link ${activeTab === 'log' ? 'active bg-secondary text-white' : 'text-secondary'}" href="/admin/log">İşlem Kayıtları</a>
                 </li>
             </ul>
             ${bodyHtml}
@@ -2071,7 +2087,9 @@ app.post('/admin/set-level', requireLogin, requireAdmin, async (req, res) => {
         if (!userId || (level !== 'Free' && level !== 'Premium')) {
             return res.status(400).send(errorPage('Hata', 'Geçersiz istek.', '/admin'));
         }
+        const { data: hedef } = await supabase.from('profiles').select('email').eq('id', userId).maybeSingle();
         await supabase.from('profiles').update({ level }).eq('id', userId);
+        await logAdminAction(req.currentUser.email, 'Seviye değiştirildi', hedef?.email, `Yeni seviye: ${level}`);
         res.redirect('/admin');
     } catch (error) {
         console.error(error);
@@ -2085,7 +2103,9 @@ app.post('/admin/set-role', requireLogin, requireAdmin, async (req, res) => {
         if (!userId || (role !== 'student' && role !== 'teacher')) {
             return res.status(400).send(errorPage('Hata', 'Geçersiz istek.', '/admin'));
         }
+        const { data: hedef } = await supabase.from('profiles').select('email').eq('id', userId).maybeSingle();
         await supabase.from('profiles').update({ role }).eq('id', userId);
+        await logAdminAction(req.currentUser.email, 'Rol değiştirildi', hedef?.email, `Yeni rol: ${role}`);
         res.redirect('/admin');
     } catch (error) {
         console.error(error);
@@ -2099,10 +2119,12 @@ app.post('/admin/delete-user', requireLogin, requireAdmin, async (req, res) => {
         if (!userId) {
             return res.status(400).send(errorPage('Hata', 'Geçersiz istek.', '/admin'));
         }
+        const { data: hedef } = await supabase.from('profiles').select('email').eq('id', userId).maybeSingle();
         // auth.users'dan silmek, foreign key cascade sayesinde profiles ve
         // ona bağlı analizler/hata defteri kayıtlarını da otomatik siliyor.
         const { error } = await supabase.auth.admin.deleteUser(userId);
         if (error) console.error(error);
+        await logAdminAction(req.currentUser.email, 'Hesap silindi', hedef?.email);
         res.redirect('/admin');
     } catch (error) {
         console.error(error);
@@ -2168,11 +2190,50 @@ app.post('/admin/destek/durum', requireLogin, requireAdmin, async (req, res) => 
         if (!id || !durum) {
             return res.status(400).send(errorPage('Hata', 'Geçersiz istek.', '/admin/destek'));
         }
+        const { data: hedef } = await supabase.from('destek_talepleri').select('email').eq('id', id).maybeSingle();
         await supabase.from('destek_talepleri').update({ durum }).eq('id', id);
+        await logAdminAction(req.currentUser.email, 'Destek talebi durumu değiştirildi', hedef?.email, `Yeni durum: ${durum}`);
         res.redirect('/admin/destek');
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Sunucu Hatası', 'Durum güncellenemedi.', '/admin/destek'));
+    }
+});
+
+app.get('/admin/log', requireLogin, requireAdmin, async (req, res) => {
+    try {
+        const { data: kayitlar } = await supabase.from('admin_log').select('*').order('tarih', { ascending: false }).limit(200);
+
+        const rows = (kayitlar || []).map(k => `
+            <tr>
+                <td>${k.tarih ? new Date(k.tarih).toLocaleString('tr-TR') : '-'}</td>
+                <td>${escapeHtml(k.admin_email)}</td>
+                <td>${escapeHtml(k.islem)}</td>
+                <td>${escapeHtml(k.hedef_email || '-')}</td>
+                <td>${escapeHtml(k.detay || '-')}</td>
+            </tr>
+        `).join('');
+
+        const body = `
+            <div class="table-responsive">
+                <table class="table table-dark table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Admin</th>
+                            <th>İşlem</th>
+                            <th>Hedef Kullanıcı</th>
+                            <th>Detay</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows || '<tr><td colspan="5" class="text-center text-secondary">Henüz kayıt yok.</td></tr>'}</tbody>
+                </table>
+            </div>`;
+
+        res.send(adminShell('log', body, `Son 200 işlem gösteriliyor.`));
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Sunucu Hatası', 'İşlem kayıtları yüklenemedi.', '/dashboard'));
     }
 });
 
