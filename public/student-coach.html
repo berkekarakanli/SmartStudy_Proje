@@ -97,6 +97,7 @@
                     <i class="fas fa-paper-plane" id="chatSendIcon"></i>
                 </button>
             </form>
+            <div class="text-muted mt-2" style="font-size:11px;">Yanıt yapay zeka tarafından üretiliyor, birkaç saniye sürebilir.</div>
         </div>
 
         <h6 class="text-info orbitron mb-3">Koç Tarafından Verilen Ödevler (<%= homeworks.length %>)</h6>
@@ -146,6 +147,14 @@
             spinner.classList.remove('d-none');
             icon.classList.add('d-none');
 
+            // Cevap birkaç saniye sürebiliyor (yapay zeka çağrısı) - kullanıcı
+            // ekranın donduğunu düşünmesin diye "yazıyor..." balonu gösteriyoruz.
+            const yaziyorBalonu = document.createElement('div');
+            yaziyorBalonu.className = 'chat-bubble ai';
+            yaziyorBalonu.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> AI Koç yazıyor...';
+            chatScroll.appendChild(yaziyorBalonu);
+            chatScroll.scrollTop = chatScroll.scrollHeight;
+
             try {
                 const res = await fetch('/api/ai-koc/mesaj-gonder', {
                     method: 'POST',
@@ -153,6 +162,7 @@
                     body: JSON.stringify({ mesaj })
                 });
                 const data = await res.json();
+                yaziyorBalonu.remove();
                 if (data.success) {
                     chatBalonEkle('ai', data.cevap);
                 } else if (data.limitDoldu) {
@@ -162,6 +172,7 @@
                     showToast(data.message || 'AI Koç şu an yanıt veremedi.', 'error');
                 }
             } catch (err) {
+                yaziyorBalonu.remove();
                 showToast('Bağlantı hatası oluştu, tekrar dene.', 'error');
             } finally {
                 btn.disabled = false;
