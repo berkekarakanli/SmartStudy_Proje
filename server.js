@@ -587,28 +587,18 @@ app.post('/register', registerLimiter, async (req, res) => {
 // 5C. E-POSTA DOĞRULAMA (KOD TABANLI)
 // ==========================================
 function verifyEmailForm(email, message, isError) {
-    return `
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <title>E-Postanı Doğrula</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    </head>
-    <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
-        <main class="text-center p-4" style="max-width: 420px; width: 100%;">
-            <h1 class="h3 mb-3">E-Postanı Doğrula</h1>
-            <p class="text-white-50">${escapeHtml(email)} adresine gönderdiğimiz 8 haneli kodu gir.</p>
-            ${message ? `<div class="alert ${isError ? 'alert-warning' : 'alert-info'}">${escapeHtml(message)}</div>` : ''}
+    return authShell({
+        title: 'E-Postanı Doğrula',
+        subtitleHtml: `<strong class="text-info">${escapeHtml(email)}</strong> adresine gönderdiğimiz 8 haneli kodu gir.`,
+        icon: 'fa-envelope-circle-check',
+        bodyHtml: `
+            ${message ? `<div class="alert-box ${isError ? 'error' : 'info'}">${escapeHtml(message)}</div>` : ''}
             <form method="POST" action="/verify-email" class="d-flex flex-column gap-2">
                 <input type="hidden" name="email" value="${escapeHtml(email)}">
-                <input type="text" name="code" class="form-control text-center" placeholder="8 haneli kod" inputmode="numeric" maxlength="8" required autofocus>
-                <button type="submit" class="btn btn-info text-dark fw-bold">Doğrula</button>
-            </form>
-            <a class="btn btn-outline-secondary mt-3" href="/login">Giriş Sayfasına Dön</a>
-        </main>
-    </body>
-    </html>`;
+                <input type="text" name="code" class="form-control space-input code-input" placeholder="········" inputmode="numeric" maxlength="8" required autofocus>
+                <button type="submit" class="btn-access orbitron mt-2">Doğrula</button>
+            </form>`
+    });
 }
 
 app.get('/verify-email', (req, res) => {
@@ -706,28 +696,72 @@ app.post('/login', loginLimiter, async (req, res) => {
 // e-postasına gelen 8 haneli kodu doğrudan bu sayfaya yazdığı bir akış
 // kullanıyoruz - hiçbir yönlendirmeye ihtiyaç yok, tamamen bu sunucudan
 // yönetiliyor.
-function forgotPasswordForm(message) {
+//
+// authShell: login.html ile birebir aynı görsel dili (Orbitron font,
+// camgöbeği/mavi tema, cam efektli kart) kullanan, bu sunucu-taraflı
+// (server-rendered) doğrulama sayfaları için ortak kabuk. Böylece
+// "Şifremi Unuttum", "E-Postanı Doğrula" ve "Yeni Şifre Belirle" ekranları
+// login/register sayfalarıyla aynı siteden geliyormuş gibi hissettiriyor.
+function authShell({ title, subtitleHtml, icon = 'fa-shield-halved', bodyHtml, backHref = '/login', backLabel = 'Giriş Sayfasına Dön' }) {
     return `
     <!DOCTYPE html>
     <html lang="tr">
     <head>
         <meta charset="UTF-8">
-        <title>Şifremi Unuttum</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SmartStudy | ${escapeHtml(title)}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <style>
+            :root { --theme-color: #0dcaf0; --theme-gradient: linear-gradient(135deg, #0dcaf0 0%, #007bff 100%); --theme-shadow: rgba(13, 202, 240, 0.4); }
+            body { margin: 0; min-height: 100vh; width: 100%; background-color: #020617; font-family: 'Inter', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 16px; box-sizing: border-box; }
+            .orbitron { font-family: 'Orbitron', sans-serif; }
+            .auth-card { background: rgba(15, 23, 42, 0.72); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 28px; padding: 40px; width: 100%; max-width: 420px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); box-sizing: border-box; }
+            @media (max-width: 480px) { .auth-card { padding: 28px 20px; border-radius: 22px; } }
+            .icon-badge { width: 64px; height: 64px; border-radius: 50%; background: rgba(13, 202, 240, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; border: 1px solid rgba(13, 202, 240, 0.3); }
+            .icon-badge i { font-size: 1.6rem; color: var(--theme-color); }
+            .form-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1.5px; color: #94a3b8; margin-bottom: 8px; }
+            .input-group-text { background: rgba(2, 6, 23, 0.8); border: 1px solid rgba(255, 255, 255, 0.08); color: #64748b; }
+            .space-input { background: rgba(2, 6, 23, 0.8) !important; border: 1px solid rgba(255, 255, 255, 0.08) !important; color: #f8fafc !important; }
+            .space-input::placeholder { color: #64748b; }
+            .space-input:focus { border-color: var(--theme-color) !important; box-shadow: 0 0 0 0.2rem var(--theme-shadow) !important; }
+            .code-input { letter-spacing: 8px; font-size: 1.3rem; font-weight: 700; text-align: center; }
+            .btn-access { border: none; color: #000; font-weight: 800; padding: 14px; border-radius: 12px; width: 100%; text-transform: uppercase; letter-spacing: 2px; transition: 0.3s; cursor: pointer; background: var(--theme-gradient); }
+            .btn-access:hover { box-shadow: 0 10px 25px var(--theme-shadow); }
+            .bottom-link { color: var(--theme-color); text-decoration: none; font-weight: 600; }
+            .bottom-link:hover { text-decoration: underline; }
+            .back-home { color: #64748b; text-decoration: none; font-size: 0.85rem; margin-top: 24px; display: inline-block; }
+            .back-home:hover { color: var(--theme-color); }
+            .alert-box { border-radius: 14px; padding: 12px 16px; font-size: 0.85rem; margin-bottom: 16px; text-align: left; }
+            .alert-box.info { background: rgba(13, 202, 240, 0.1); border: 1px solid rgba(13, 202, 240, 0.3); color: #7dd8ec; }
+            .alert-box.error { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; }
+        </style>
     </head>
-    <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
-        <main class="text-center p-4" style="max-width: 420px;">
-            <h1 class="h3 mb-3">Şifremi Unuttum</h1>
-            <p class="text-white-50">Kayıtlı e-posta adresini gir, sana 8 haneli bir doğrulama kodu gönderelim.</p>
-            ${message ? `<div class="alert alert-info">${escapeHtml(message)}</div>` : ''}
-            <form method="POST" action="/forgot-password" class="d-flex flex-column gap-2">
-                <input type="email" name="email" class="form-control" placeholder="E-posta adresin" required>
-                <button type="submit" class="btn btn-info text-dark fw-bold">Kod Gönder</button>
-            </form>
-            <a class="btn btn-outline-secondary mt-3" href="/login">Giriş Sayfasına Dön</a>
+    <body>
+        <main class="auth-card text-center">
+            <div class="icon-badge"><i class="fas ${icon}"></i></div>
+            <h3 class="orbitron fw-bold mb-1">${escapeHtml(title)}</h3>
+            <p class="text-secondary small mb-4">${subtitleHtml}</p>
+            ${bodyHtml}
         </main>
+        <a href="${backHref}" class="back-home"><i class="fas fa-arrow-left me-1"></i>${escapeHtml(backLabel)}</a>
     </body>
     </html>`;
+}
+
+function forgotPasswordForm(message) {
+    return authShell({
+        title: 'Şifremi Unuttum',
+        subtitleHtml: 'Kayıtlı e-posta adresini gir, sana 8 haneli bir doğrulama kodu gönderelim.',
+        icon: 'fa-key',
+        bodyHtml: `
+            ${message ? `<div class="alert-box info">${escapeHtml(message)}</div>` : ''}
+            <form method="POST" action="/forgot-password" class="d-flex flex-column gap-2">
+                <input type="email" name="email" class="form-control space-input" placeholder="E-posta adresin" required>
+                <button type="submit" class="btn-access orbitron mt-2">Kod Gönder</button>
+            </form>`
+    });
 }
 
 app.get('/forgot-password', (req, res) => {
@@ -751,29 +785,21 @@ app.post('/forgot-password', sensitiveActionLimiter, async (req, res) => {
 });
 
 function resetPasswordForm(email, message, isError) {
-    return `
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-        <meta charset="UTF-8">
-        <title>Yeni Şifre Belirle</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    </head>
-    <body class="bg-dark text-white d-flex align-items-center justify-content-center min-vh-100">
-        <main class="text-center p-4" style="max-width: 420px; width: 100%;">
-            <h1 class="h3 mb-3">Yeni Şifre Belirle</h1>
-            <p class="text-white-50">${escapeHtml(email)} adresine gönderdiğimiz 8 haneli kodu ve yeni şifreni gir.</p>
-            ${message ? `<div class="alert ${isError ? 'alert-warning' : 'alert-info'}">${escapeHtml(message)}</div>` : ''}
+    return authShell({
+        title: 'Yeni Şifre Belirle',
+        subtitleHtml: `<strong class="text-info">${escapeHtml(email)}</strong> adresine gönderdiğimiz 8 haneli kodu ve yeni şifreni gir.`,
+        icon: 'fa-lock',
+        backHref: '/forgot-password',
+        backLabel: 'Kodu Tekrar Gönder',
+        bodyHtml: `
+            ${message ? `<div class="alert-box ${isError ? 'error' : 'info'}">${escapeHtml(message)}</div>` : ''}
             <form method="POST" action="/reset-password" class="d-flex flex-column gap-2">
                 <input type="hidden" name="email" value="${escapeHtml(email)}">
-                <input type="text" name="code" class="form-control text-center" placeholder="8 haneli kod" inputmode="numeric" maxlength="8" required autofocus>
-                <input type="password" name="newPassword" class="form-control" placeholder="Yeni şifre (en az 8 karakter)" minlength="8" required>
-                <button type="submit" class="btn btn-info text-dark fw-bold">Şifreyi Güncelle</button>
-            </form>
-            <a class="btn btn-outline-secondary mt-3" href="/forgot-password">Kodu Tekrar Gönder</a>
-        </main>
-    </body>
-    </html>`;
+                <input type="text" name="code" class="form-control space-input code-input" placeholder="········" inputmode="numeric" maxlength="8" required autofocus>
+                <input type="password" name="newPassword" class="form-control space-input" placeholder="Yeni şifre (en az 8 karakter)" minlength="8" required>
+                <button type="submit" class="btn-access orbitron mt-2">Şifreyi Güncelle</button>
+            </form>`
+    });
 }
 
 app.get('/reset-password', (req, res) => {
@@ -1909,6 +1935,40 @@ async function requireAdmin(req, res, next) {
     next();
 }
 
+// Admin sayfaları ortak kabuğu - üstte sekme (Kullanıcılar / Destek
+// Talepleri) navigasyonu olan, koyu temalı basit bir yönetim arayüzü.
+function adminShell(activeTab, bodyHtml, stats) {
+    return `
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Admin Paneli - SmartStudy</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    </head>
+    <body class="bg-dark text-white p-4">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h1 class="h3 m-0"><i class="fas fa-user-shield me-2 text-info"></i>Admin Paneli</h1>
+                <a href="/dashboard" class="btn btn-outline-info btn-sm">Panele Dön</a>
+            </div>
+            ${stats ? `<p class="text-secondary">${stats}</p>` : ''}
+            <ul class="nav nav-tabs mb-3 border-secondary">
+                <li class="nav-item">
+                    <a class="nav-link ${activeTab === 'kullanicilar' ? 'active bg-secondary text-white' : 'text-secondary'}" href="/admin">Kullanıcılar</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link ${activeTab === 'destek' ? 'active bg-secondary text-white' : 'text-secondary'}" href="/admin/destek">Destek Talepleri</a>
+                </li>
+            </ul>
+            ${bodyHtml}
+        </div>
+    </body>
+    </html>`;
+}
+
 app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
     try {
         const [{ data: profiles }, { data: analizler }, { data: wrongQs }] = await Promise.all([
@@ -1922,7 +1982,10 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
         const hataSayaci = {};
         for (const w of (wrongQs || [])) hataSayaci[w.user_id] = (hataSayaci[w.user_id] || 0) + 1;
 
-        const rows = (profiles || []).map(p => `
+        const rows = (profiles || []).map(p => {
+            const yeniSeviye = p.level === 'Premium' ? 'Free' : 'Premium';
+            const yeniRol = p.role === 'teacher' ? 'student' : 'teacher';
+            return `
             <tr>
                 <td>${escapeHtml(p.ad || '-')}</td>
                 <td>${escapeHtml(p.email || '-')}</td>
@@ -1931,46 +1994,164 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
                 <td>${p.kayit_tarihi ? new Date(p.kayit_tarihi).toLocaleDateString('tr-TR') : '-'}</td>
                 <td class="text-center">${analizSayaci[p.id] || 0}</td>
                 <td class="text-center">${hataSayaci[p.id] || 0}</td>
+                <td class="d-flex flex-wrap gap-1">
+                    <form method="POST" action="/admin/set-level">
+                        <input type="hidden" name="userId" value="${escapeHtml(p.id)}">
+                        <input type="hidden" name="level" value="${yeniSeviye}">
+                        <button type="submit" class="btn btn-sm ${yeniSeviye === 'Premium' ? 'btn-success' : 'btn-outline-secondary'}">${yeniSeviye === 'Premium' ? 'Premium Yap' : "Free'ye Düşür"}</button>
+                    </form>
+                    <form method="POST" action="/admin/set-role">
+                        <input type="hidden" name="userId" value="${escapeHtml(p.id)}">
+                        <input type="hidden" name="role" value="${yeniRol}">
+                        <button type="submit" class="btn btn-sm btn-outline-warning">${yeniRol === 'teacher' ? 'Öğretmen Yap' : 'Öğrenci Yap'}</button>
+                    </form>
+                    <form method="POST" action="/admin/delete-user" onsubmit="return confirm('${escapeHtml(p.email)} hesabını ve TÜM verilerini (analiz, hata defteri vb.) kalıcı olarak silmek istediğine emin misin? Bu geri alınamaz.');">
+                        <input type="hidden" name="userId" value="${escapeHtml(p.id)}">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Sil</button>
+                    </form>
+                </td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
 
-        res.send(`
-        <!DOCTYPE html>
-        <html lang="tr">
-        <head>
-            <meta charset="UTF-8">
-            <title>Admin Paneli - SmartStudy</title>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        </head>
-        <body class="bg-dark text-white p-4">
-            <div class="container-fluid">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h1 class="h3 m-0">Admin Paneli</h1>
-                    <a href="/dashboard" class="btn btn-outline-info btn-sm">Panele Dön</a>
-                </div>
-                <p class="text-secondary">Toplam kullanıcı: <strong>${(profiles || []).length}</strong> · Toplam analiz: <strong>${(analizler || []).length}</strong> · Toplam hata defteri kaydı: <strong>${(wrongQs || []).length}</strong></p>
-                <div class="table-responsive">
-                    <table class="table table-dark table-striped table-hover align-middle">
-                        <thead>
-                            <tr>
-                                <th>Ad</th>
-                                <th>E-Posta</th>
-                                <th>Rol</th>
-                                <th>Seviye</th>
-                                <th>Kayıt Tarihi</th>
-                                <th class="text-center">Analiz Sayısı</th>
-                                <th class="text-center">Hata Defteri</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows || '<tr><td colspan="7" class="text-center text-secondary">Henüz kullanıcı yok.</td></tr>'}</tbody>
-                    </table>
-                </div>
-            </div>
-        </body>
-        </html>`);
+        const body = `
+            <div class="table-responsive">
+                <table class="table table-dark table-striped table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Ad</th>
+                            <th>E-Posta</th>
+                            <th>Rol</th>
+                            <th>Seviye</th>
+                            <th>Kayıt Tarihi</th>
+                            <th class="text-center">Analiz Sayısı</th>
+                            <th class="text-center">Hata Defteri</th>
+                            <th>İşlemler</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows || '<tr><td colspan="8" class="text-center text-secondary">Henüz kullanıcı yok.</td></tr>'}</tbody>
+                </table>
+            </div>`;
+
+        res.send(adminShell(
+            'kullanicilar',
+            body,
+            `Toplam kullanıcı: <strong>${(profiles || []).length}</strong> · Toplam analiz: <strong>${(analizler || []).length}</strong> · Toplam hata defteri kaydı: <strong>${(wrongQs || []).length}</strong>`
+        ));
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Sunucu Hatası', 'Admin paneli yüklenemedi.', '/dashboard'));
+    }
+});
+
+app.post('/admin/set-level', requireLogin, requireAdmin, async (req, res) => {
+    try {
+        const { userId, level } = req.body;
+        if (!userId || (level !== 'Free' && level !== 'Premium')) {
+            return res.status(400).send(errorPage('Hata', 'Geçersiz istek.', '/admin'));
+        }
+        await supabase.from('profiles').update({ level }).eq('id', userId);
+        res.redirect('/admin');
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Sunucu Hatası', 'Seviye güncellenemedi.', '/admin'));
+    }
+});
+
+app.post('/admin/set-role', requireLogin, requireAdmin, async (req, res) => {
+    try {
+        const { userId, role } = req.body;
+        if (!userId || (role !== 'student' && role !== 'teacher')) {
+            return res.status(400).send(errorPage('Hata', 'Geçersiz istek.', '/admin'));
+        }
+        await supabase.from('profiles').update({ role }).eq('id', userId);
+        res.redirect('/admin');
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Sunucu Hatası', 'Rol güncellenemedi.', '/admin'));
+    }
+});
+
+app.post('/admin/delete-user', requireLogin, requireAdmin, async (req, res) => {
+    try {
+        const { userId } = req.body;
+        if (!userId) {
+            return res.status(400).send(errorPage('Hata', 'Geçersiz istek.', '/admin'));
+        }
+        // auth.users'dan silmek, foreign key cascade sayesinde profiles ve
+        // ona bağlı analizler/hata defteri kayıtlarını da otomatik siliyor.
+        const { error } = await supabase.auth.admin.deleteUser(userId);
+        if (error) console.error(error);
+        res.redirect('/admin');
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Sunucu Hatası', 'Kullanıcı silinemedi.', '/admin'));
+    }
+});
+
+app.get('/admin/destek', requireLogin, requireAdmin, async (req, res) => {
+    try {
+        const { data: talepler } = await supabase.from('destek_talepleri').select('*').order('tarih', { ascending: false });
+
+        const rows = (talepler || []).map(t => `
+            <tr class="${t.durum === 'yeni' ? '' : 'opacity-50'}">
+                <td>${t.tarih ? new Date(t.tarih).toLocaleString('tr-TR') : '-'}</td>
+                <td>${escapeHtml(t.ad || '-')}</td>
+                <td>${escapeHtml(t.email || '-')}</td>
+                <td>${escapeHtml(t.konu || '-')}</td>
+                <td style="max-width: 380px; white-space: pre-wrap;">${escapeHtml(t.mesaj || '-')}</td>
+                <td><span class="badge ${t.durum === 'yeni' ? 'bg-warning text-dark' : 'bg-secondary'}">${escapeHtml(t.durum || 'yeni')}</span></td>
+                <td>
+                    ${t.durum === 'yeni' ? `
+                    <form method="POST" action="/admin/destek/durum">
+                        <input type="hidden" name="id" value="${escapeHtml(t.id)}">
+                        <input type="hidden" name="durum" value="cozuldu">
+                        <button type="submit" class="btn btn-sm btn-outline-success">Çözüldü İşaretle</button>
+                    </form>` : ''}
+                </td>
+            </tr>
+        `).join('');
+
+        const body = `
+            <div class="table-responsive">
+                <table class="table table-dark table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Tarih</th>
+                            <th>Ad</th>
+                            <th>E-Posta</th>
+                            <th>Konu</th>
+                            <th>Mesaj</th>
+                            <th>Durum</th>
+                            <th>İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows || '<tr><td colspan="7" class="text-center text-secondary">Henüz destek talebi yok.</td></tr>'}</tbody>
+                </table>
+            </div>`;
+
+        res.send(adminShell(
+            'destek',
+            body,
+            `Toplam talep: <strong>${(talepler || []).length}</strong> · Yeni: <strong>${(talepler || []).filter(t => t.durum === 'yeni').length}</strong>`
+        ));
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Sunucu Hatası', 'Destek talepleri yüklenemedi.', '/dashboard'));
+    }
+});
+
+app.post('/admin/destek/durum', requireLogin, requireAdmin, async (req, res) => {
+    try {
+        const { id, durum } = req.body;
+        if (!id || !durum) {
+            return res.status(400).send(errorPage('Hata', 'Geçersiz istek.', '/admin/destek'));
+        }
+        await supabase.from('destek_talepleri').update({ durum }).eq('id', id);
+        res.redirect('/admin/destek');
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Sunucu Hatası', 'Durum güncellenemedi.', '/admin/destek'));
     }
 });
 
