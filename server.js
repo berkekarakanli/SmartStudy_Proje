@@ -468,6 +468,7 @@ app.get('/api/me', async (req, res) => {
 app.post('/register', registerLimiter, async (req, res) => {
     try {
         const ad = String(req.body.ad || '').trim();
+        const soyad = String(req.body.soyad || '').trim();
         const email = String(req.body.email || '').trim().toLowerCase();
         const sifre = String(req.body.sifre || '');
         const role = req.body.role === 'teacher' ? 'teacher' : 'student';
@@ -475,8 +476,20 @@ app.post('/register', registerLimiter, async (req, res) => {
         // İstemci tarafı (JS) doğrulaması atlanabildiği için (curl, geliştirici
         // araçları vb.) aynı kontrolleri burada, sunucu tarafında da yapıyoruz.
         const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!ad || ad.length < 2 || !email || !emailPattern.test(email) || sifre.length < 8) {
-            const msg = 'Tüm alanları doğru doldurun (isim en az 2 karakter, geçerli bir e-posta, şifre en az 8 karakter olmalı).';
+        const isimPattern = /^[A-Za-zÇĞİıÖŞÜçğıöşü\s]{2,30}$/;
+        // Flutter (mobil) tarafı henüz soyad alanı göndermiyor olabilir - web
+        // formunda zorunlu, mobil isteklerde (JSON) şimdilik boş geçilebiliyor
+        // ki mobil taraf güncellenene kadar kayıt kırılmasın. Ama gönderilmişse
+        // (boş değilse) o da geçerli bir isim olmak zorunda.
+        const soyadGecerli = wantsJson(req) ? (!soyad || isimPattern.test(soyad)) : isimPattern.test(soyad);
+        if (!isimPattern.test(ad) || !soyadGecerli || !email || !emailPattern.test(email) || sifre.length < 8) {
+            const msg = 'Tüm alanları doğru doldurun (ad/soyad sadece harflerden oluşmalı, geçerli bir e-posta, şifre en az 8 karakter olmalı).';
+            if (wantsJson(req)) return res.status(400).json({ success: false, message: msg });
+            return res.status(400).send(errorPage('Kayıt Hatası', msg, '/register'));
+        }
+        // Şifre güvenliği: en az 1 büyük harf, 1 rakam, 1 sembol.
+        if (!/[A-Z]/.test(sifre) || !/[0-9]/.test(sifre) || !/[^A-Za-z0-9]/.test(sifre)) {
+            const msg = 'Şifre en az 1 büyük harf, 1 rakam ve 1 sembol içermelidir.';
             if (wantsJson(req)) return res.status(400).json({ success: false, message: msg });
             return res.status(400).send(errorPage('Kayıt Hatası', msg, '/register'));
         }
@@ -526,7 +539,7 @@ app.post('/register', registerLimiter, async (req, res) => {
             email,
             password: sifre,
             options: {
-                data: { ad, role, kvkk_onay: kvkkOnayVerildi, sozlesme_onay: sozlesmeOnayVerildi }
+                data: { ad, soyad: soyad || null, role, kvkk_onay: kvkkOnayVerildi, sozlesme_onay: sozlesmeOnayVerildi }
             }
         });
 

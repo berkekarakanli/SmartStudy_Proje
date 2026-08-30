@@ -338,12 +338,21 @@
                 </div>
             </div>
 
-            <!-- AD SOYAD -->
+            <!-- AD -->
             <div class="mb-3">
-                <label class="form-label">Tam Adınız</label>
+                <label class="form-label">Adınız</label>
                 <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-id-card"></i></span>
-                    <input type="text" name="ad" id="ad" class="form-control space-input" placeholder="Örn: Berke Yılmaz" required>
+                    <input type="text" name="ad" id="ad" class="form-control space-input" placeholder="Örn: Berke" required>
+                </div>
+            </div>
+
+            <!-- SOYAD -->
+            <div class="mb-3">
+                <label class="form-label">Soyadınız</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="fas fa-id-card"></i></span>
+                    <input type="text" name="soyad" id="soyad" class="form-control space-input" placeholder="Örn: Yılmaz" required>
                 </div>
             </div>
 
@@ -363,6 +372,7 @@
                     <span class="input-group-text"><i class="fas fa-lock"></i></span>
                     <input type="password" name="sifre" id="sifre" class="form-control space-input" placeholder="••••••••" minlength="8" required>
                 </div>
+                <div class="form-text text-secondary" style="font-size: 0.72rem;">En az 8 karakter, 1 büyük harf, 1 rakam ve 1 sembol içermeli.</div>
             </div>
 
             <!-- ŞİFRE TEKRAR -->
@@ -529,6 +539,7 @@
         // FORM DOĞRULAMA VE ANİMASYON
         function validateRegister() {
             const ad = document.getElementById("ad").value;
+            const soyad = document.getElementById("soyad").value;
             const email = document.getElementById("email").value;
             const pass = document.getElementById("sifre").value;
             const passTekrar = document.getElementById("sifreTekrar").value;
@@ -536,9 +547,17 @@
             // type="email" doğrulaması otomatik olarak kaçırdığı bazı
             // geçersiz adresleri (boşluk, eksik uzantı vb.) burada yakalıyoruz.
             const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            // Sadece harf (Türkçe karakterler dahil) ve boşluk - rakam,
+            // sembol, emoji gibi "garip" isim girişlerini engelliyor.
+            const isimPattern = /^[A-Za-zÇĞİıÖŞÜçğıöşü\s]{2,30}$/;
 
-            if (ad.trim().length < 2) {
-                showToast("Hata: Geçerli bir isim giriniz.", "error");
+            if (!isimPattern.test(ad.trim())) {
+                showToast("Hata: Ad alanı sadece harflerden oluşmalı (2-30 karakter).", "error");
+                return false;
+            }
+
+            if (!isimPattern.test(soyad.trim())) {
+                showToast("Hata: Soyad alanı sadece harflerden oluşmalı (2-30 karakter).", "error");
                 return false;
             }
 
@@ -549,6 +568,12 @@
 
             if (pass.length < 8) {
                 showToast("Hata: Analiz anahtarı (şifre) en az 8 karakter olmalıdır.", "error");
+                return false;
+            }
+
+            // Şifre güvenliği: en az 1 büyük harf, 1 rakam, 1 sembol.
+            if (!/[A-Z]/.test(pass) || !/[0-9]/.test(pass) || !/[^A-Za-z0-9]/.test(pass)) {
+                showToast("Hata: Şifre en az 1 büyük harf, 1 rakam ve 1 sembol (örn. ! ? # @) içermeli.", "error");
                 return false;
             }
 
