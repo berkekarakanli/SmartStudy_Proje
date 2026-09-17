@@ -19,6 +19,7 @@
     "ejs": "^6.0.1",
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.2",
-    "express-session": "^1.19.0"
+    "express-session": "^1.19.0",
+    "iyzipay": "^2.0.69"
   }
 }

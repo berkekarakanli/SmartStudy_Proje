@@ -12,43 +12,77 @@
     <style>
         body { background: #020617; color: white; font-family: 'Inter', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
         .pay-card { background: rgba(30, 41, 59, 0.85); border: 1px solid rgba(255, 193, 7, 0.3); border-radius: 20px; padding: 40px; width: 100%; max-width: 500px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); box-sizing: border-box; }
-        .form-control, .form-control:focus { background: #0f172a !important; border: 1px solid #334155; color: white !important; padding: 12px; }
-        .form-control:focus { border-color: #0dcaf0; box-shadow: 0 0 0 .25rem rgba(13,202,240,.25); }
-        .form-control::placeholder { color:#64748b; }
+        #odemeFormAlani iframe { width: 100%; min-height: 620px; border: none; border-radius: 12px; }
     </style>
 </head>
 <body>
     <div class="pay-card">
         <h3 class="text-warning font-monospace mb-2 text-center" style="font-family:'Orbitron', sans-serif;"><i class="fas fa-lock me-2"></i>PREMİUM ÖDEME</h3>
-        <p class="text-secondary small text-center mb-4">SmartStudy OS Sonsuz Erişim Paketi - 149.00 TL</p>
-        <form action="/payment-success" method="POST">
-            <div class="mb-3">
-                <label class="form-label text-info small fw-bold">KART ÜZERİNDEKİ AD SOYAD</label>
-                <input type="text" class="form-control" placeholder="Örn: Mustafa Berke Karakanlı" required>
+        <p class="text-secondary small text-center mb-4">SmartStudy Premium Üyelik - <%= premiumFiyat.toFixed(2) %> TL / ay</p>
+
+        <% if (typeof odemeBasarisiz !== 'undefined' && odemeBasarisiz) { %>
+            <div class="alert alert-danger small">Ödeme tamamlanamadı ya da iptal edildi. Tekrar deneyebilirsin.</div>
+        <% } %>
+
+        <% if (!odemeAktif) { %>
+            <div class="alert alert-warning small">Ödeme sistemi şu an bakımda/yapılandırılmamış, birazdan tekrar dene.</div>
+        <% } else { %>
+            <div id="baslangicAlani">
+                <p class="text-secondary small">Kart bilgilerini SmartStudy'e değil, doğrudan güvenli ödeme sağlayıcımıza gireceksin - kart numaranı hiçbir zaman bizim sunucularımız görmüyor.</p>
+                <button class="btn btn-warning w-100 fw-bold py-3 orbitron text-dark" id="odemeBaslatBtn" onclick="odemeBaslat()">
+                    <span id="odemeSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>Ödemeye Geç
+                </button>
             </div>
-            <div class="mb-3">
-                <label class="form-label text-info small fw-bold">KART NUMARASI</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-dark border-secondary text-warning"><i class="fas fa-credit-card"></i></span>
-                    <input type="text" class="form-control" placeholder="4532 •••• •••• 8890" maxlength="19" required>
-                </div>
-            </div>
-            <div class="row mb-4">
-                <div class="col-md-6">
-                    <label class="form-label text-info small fw-bold">SON KULLANMA</label>
-                    <input type="text" class="form-control" placeholder="AA/YY" maxlength="5" required>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label text-info small fw-bold">CVV GÜVENLİK</label>
-                    <input type="password" class="form-control" placeholder="•••" maxlength="4" required>
-                </div>
-            </div>
-            <button class="btn btn-warning w-100 fw-bold py-3 orbitron text-dark">Ödemeyi Güvenle Tamamla</button>
-            <div class="d-flex justify-content-center gap-3 mt-3">
-                <a href="/" class="text-secondary text-decoration-none small"><i class="fas fa-house me-1"></i>Ana Sayfa</a>
-                <a href="/dashboard" class="text-secondary text-decoration-none small">Panele Geri Dön</a>
-            </div>
-        </form>
+            <div id="odemeFormAlani" class="mt-3"></div>
+        <% } %>
+
+        <div class="d-flex justify-content-center gap-3 mt-3">
+            <a href="/" class="text-secondary text-decoration-none small"><i class="fas fa-house me-1"></i>Ana Sayfa</a>
+            <a href="/dashboard" class="text-secondary text-decoration-none small">Panele Geri Dön</a>
+        </div>
     </div>
+    <script>
+        async function odemeBaslat() {
+            const btn = document.getElementById('odemeBaslatBtn');
+            const spinner = document.getElementById('odemeSpinner');
+            btn.disabled = true;
+            spinner.classList.remove('d-none');
+            try {
+                const res = await fetch('/api/payment/baslat', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('baslangicAlani').classList.add('d-none');
+                    const alan = document.getElementById('odemeFormAlani');
+                    if (data.iframeUrl) {
+                        // PayTR - basit bir iframe yeterli.
+                        const iframe = document.createElement('iframe');
+                        iframe.src = data.iframeUrl;
+                        iframe.setAttribute('frameborder', '0');
+                        alan.appendChild(iframe);
+                    } else if (data.checkoutFormContent) {
+                        // iyzico - checkoutFormContent kendi <script> etiketini
+                        // içeriyor, innerHTML ile eklenen script'ler tarayıcıda
+                        // otomatik ÇALIŞMAZ, bu yüzden script'i yeniden oluşturup
+                        // ekliyoruz ki iyzico'nun formu gerçekten render olsun.
+                        alan.innerHTML = data.checkoutFormContent;
+                        alan.querySelectorAll('script').forEach(eskiScript => {
+                            const yeniScript = document.createElement('script');
+                            if (eskiScript.src) { yeniScript.src = eskiScript.src; }
+                            else { yeniScript.textContent = eskiScript.textContent; }
+                            eskiScript.replaceWith(yeniScript);
+                        });
+                    }
+                } else {
+                    alert(data.message || 'Ödeme başlatılamadı.');
+                    btn.disabled = false;
+                    spinner.classList.add('d-none');
+                }
+            } catch (err) {
+                alert('Bağlantı hatası oluştu, tekrar dene.');
+                btn.disabled = false;
+                spinner.classList.add('d-none');
+            }
+        }
+    </script>
 </body>
 </html>

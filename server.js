@@ -13,6 +13,8 @@ const rateLimit = require('express-rate-limit');
 const ejs = require('ejs');
 const { readNetFromOpticImage, generateHomeworkPlan, generateChatReply } = require('./geminiService');
 const { EXAM_DATES, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getTumDersler } = require('./curriculum');
+const { odemeBaslat, odemeDogrula, iyzicoAktif } = require('./iyzicoService');
+const { odemeBaslat: paytrOdemeBaslat, bildirimDogrula: paytrBildirimDogrula, paytrAktif } = require('./paytrService');
 
 const app = express();
 
@@ -1675,17 +1677,130 @@ app.get('/pomodoro', requireLogin, async (req, res) => {
     }
 });
 
+// Premium fiyatı - AÇIK NOKTA: gerçek fiyatı Berke belirleyecek, şimdilik
+// yer tutucu bir değer. Değiştirmek için sadece bu satırı güncellemek yeterli.
+const PREMIUM_FIYAT_TL = 99.90;
+
+// AKTİF SAĞLAYICI: PayTR denemesi de vazgeçildi, iyzico'ya geri dönüldü -
+// üye iş yeri kaydındaki soruna destek@iyzico.com'a yazılıp çözüm bekleniyor.
+// Sağlayıcı değiştirmek gerekirse SADECE bu satırı değiştirmek yeterli,
+// aşağıdaki route'lar zaten her iki sağlayıcıyı da destekliyor.
+const AKTIF_SAGLAYICI = 'iyzico'; // 'iyzico' | 'paytr'
+
 app.get('/payment', requireLogin, async (req, res) => {
     const user = await currentUser(req);
     if (!user) return res.redirect('/login');
 
-    res.render('payment');
+    res.render('payment', {
+        premiumFiyat: PREMIUM_FIYAT_TL,
+        odemeAktif: AKTIF_SAGLAYICI === 'paytr' ? paytrAktif : iyzicoAktif,
+        odemeBasarisiz: req.query.durum === 'basarisiz' || req.query.durum === 'hata'
+    });
 });
 
-app.post('/payment-success', requireLogin, async (req, res) => {
-    await supabase.from('profiles').update({ level: 'Premium' }).eq('id', req.session.userId);
-    req.session.userLevel = 'Premium';
-    res.redirect('/dashboard');
+// Gerçek ödeme - aktif sağlayıcının kendi barındırdığı ödeme formunu/
+// iframe'ini başlatır. Kart bilgisi hiçbir zaman bizim sunucumuza gelmiyor.
+app.post('/api/payment/baslat', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+        if (user.level === 'Premium') return res.status(400).json({ success: false, message: 'Zaten Premium üyesin.' });
+
+        const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '85.34.78.112';
+
+        if (AKTIF_SAGLAYICI === 'iyzico') {
+            const callbackUrl = `${req.protocol}://${req.get('host')}/payment/callback`;
+            const sonuc = await odemeBaslat({ user, tutar: PREMIUM_FIYAT_TL, callbackUrl, ip });
+            if (!sonuc.basarili) {
+                return res.status(503).json({ success: false, message: sonuc.mesaj || 'Ödeme başlatılamadı.' });
+            }
+            await supabase.from('odemeler').insert({
+                user_id: user.id, saglayici: 'iyzico', referans: sonuc.token,
+                tutar: PREMIUM_FIYAT_TL, durum: 'baslatildi'
+            });
+            return res.json({ success: true, checkoutFormContent: sonuc.checkoutFormContent });
+        }
+
+        // AKTIF_SAGLAYICI === 'paytr'
+        const okUrl = `${req.protocol}://${req.get('host')}/dashboard?odeme=basarili`;
+        const failUrl = `${req.protocol}://${req.get('host')}/payment?durum=basarisiz`;
+        const sonuc = await paytrOdemeBaslat({ user, tutar: PREMIUM_FIYAT_TL, ip, okUrl, failUrl });
+        if (!sonuc.basarili) {
+            return res.status(503).json({ success: false, message: sonuc.mesaj || 'Ödeme başlatılamadı.' });
+        }
+        await supabase.from('odemeler').insert({
+            user_id: user.id, saglayici: 'paytr', referans: sonuc.merchantOid,
+            tutar: PREMIUM_FIYAT_TL, durum: 'baslatildi'
+        });
+        res.json({ success: true, iframeUrl: `https://www.paytr.com/odeme/guvenli/${sonuc.token}` });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
+    }
+});
+
+// PayTR ödeme tamamlanınca (başarılı ya da başarısız) SUNUCU-SUNUCU bir
+// bildirim gönderiyor (kullanıcının tarayıcısı üzerinden değil). Bu isteğin
+// İÇERİĞİNE asla güvenmiyoruz - hash'i kendimiz yeniden hesaplayıp
+// karşılaştırıyoruz (bildirimDogrula), sadece imza doğrularsa Premium
+// veriliyor. PayTR "OK" cevabı gelmezse bildirimi 1 dakika sonra tekrar
+// gönderiyor, bu yüzden mutlaka düz metin "OK" döndürmemiz gerekiyor.
+app.post('/payment/notification', async (req, res) => {
+    try {
+        const sonuc = paytrBildirimDogrula(req.body);
+        if (!sonuc.hashDogruMu) {
+            console.error('[payment/notification] Hash doğrulanamadı - sahte bildirim olabilir:', req.body);
+            return res.send('OK'); // PayTR'e "aldım" de ki tekrar tekrar göndermesin, ama Premium VERME.
+        }
+
+        const { data: odemeKaydi } = await supabase.from('odemeler').select('*').eq('referans', sonuc.merchantOid).maybeSingle();
+
+        await supabase.from('odemeler').update({
+            durum: sonuc.basarili ? 'basarili' : 'basarisiz',
+            ham_yanit: req.body
+        }).eq('referans', sonuc.merchantOid);
+
+        if (sonuc.basarili && odemeKaydi) {
+            await supabase.from('profiles').update({ level: 'Premium' }).eq('id', odemeKaydi.user_id);
+        }
+
+        res.send('OK');
+    } catch (error) {
+        console.error('[payment/notification]', error);
+        res.send('OK'); // Hata olsa da PayTR'e OK dönmezsek sonsuz tekrar dener.
+    }
+});
+
+// iyzico ödeme tamamlanınca (başarılı ya da başarısız) kullanıcıyı buraya
+// POST ile geri gönderiyor. Callback isteğinin İÇERİĞİNE asla güvenmiyoruz -
+// token'ı alıp iyzico'ya "bu ödeme gerçekten başarılı mı" diye SORUYORUZ
+// (odemeDogrula), sadece o cevap + imza doğrulaması onaylarsa Premium
+// veriliyor.
+app.post('/payment/callback', async (req, res) => {
+    try {
+        const token = req.body.token;
+        if (!token) return res.redirect('/payment?durum=hata');
+
+        const sonuc = await odemeDogrula(token);
+
+        const { data: odemeKaydi } = await supabase.from('odemeler').select('*').eq('referans', token).maybeSingle();
+
+        await supabase.from('odemeler').update({
+            durum: sonuc.basarili ? 'basarili' : 'basarisiz',
+            ham_yanit: sonuc.hamYanit || null
+        }).eq('referans', token);
+
+        if (sonuc.basarili && odemeKaydi) {
+            await supabase.from('profiles').update({ level: 'Premium' }).eq('id', odemeKaydi.user_id);
+            if (req.session.userId === odemeKaydi.user_id) req.session.userLevel = 'Premium';
+            return res.redirect('/dashboard?odeme=basarili');
+        }
+
+        res.redirect('/payment?durum=basarisiz');
+    } catch (error) {
+        console.error('[payment/callback]', error);
+        res.redirect('/payment?durum=hata');
+    }
 });
 
 app.get('/add-video', requireLogin, async (req, res) => {

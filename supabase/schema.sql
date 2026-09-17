@@ -333,3 +333,30 @@ create table public.ai_mesajlar (
 create index idx_ai_mesajlar_user_tarih on public.ai_mesajlar(user_id, tarih);
 
 alter table public.ai_mesajlar enable row level security;
+
+-- ==========================================
+-- ODEMELER (iyzico/PayTR ile gerçek Premium ödemeleri)
+-- ==========================================
+-- Her ödeme denemesi (başlatıldığında) bir satır olarak kaydedilir, sağlayıcı
+-- (iyzico ya da PayTR) callback/bildirim gönderince durumu güncellenir.
+-- "saglayici" + "referans" sağlayıcıdan bağımsız çalışabilmek için genel
+-- tutuluyor - iyzico'da referans "token", PayTR'de "merchant_oid" oluyor.
+-- Muhasebe/itiraz durumunda geriye dönük bakabilmek için ham yanıt da
+-- (ham_yanit) saklanıyor - kart bilgisi ASLA burada tutulmuyor, ikisi de
+-- kendi barındırdıkları formu kullanıyor, kart verisi bize hiç gelmiyor
+-- (PCI-DSS kapsamımızın dışında kalıyor).
+create table public.odemeler (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references public.profiles(id) on delete cascade,
+    saglayici text not null default 'iyzico' check (saglayici in ('iyzico', 'paytr')),
+    referans text not null,
+    tutar numeric not null,
+    durum text not null default 'baslatildi' check (durum in ('baslatildi', 'basarili', 'basarisiz')),
+    ham_yanit jsonb,
+    tarih timestamptz not null default now()
+);
+
+create index idx_odemeler_user_id on public.odemeler(user_id);
+create index idx_odemeler_referans on public.odemeler(referans);
+
+alter table public.odemeler enable row level security;
