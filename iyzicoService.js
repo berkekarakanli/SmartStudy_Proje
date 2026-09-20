@@ -69,7 +69,13 @@ function odemeBaslat({ user, tutar, callbackUrl, ip }) {
             paidPrice: fiyatMetni,
             currency: Iyzipay.CURRENCY.TRY,
             basketId: 'PREMIUM-' + user.id,
-            paymentGroup: Iyzipay.PAYMENT_GROUP.SUBSCRIPTION,
+            // BİLİNÇLİ KARAR: SUBSCRIPTION (otomatik tekrarlayan/kart saklı
+            // abonelik) DEĞİL, PRODUCT (tek seferlik satış) kullanıyoruz.
+            // iyzico, abonelik modelinin kurumsal (şirket) üyelik gerektirdiğini
+            // söyledi - bireysel/TC kimlik ile başvurabilmek için öğrenci her
+            // 30 günde bir kendi elle "yenile"diği bir ürün satın alıyor,
+            // kartı bizde/iyzico'da saklı tutup otomatik çekmiyoruz.
+            paymentGroup: Iyzipay.PAYMENT_GROUP.PRODUCT,
             callbackUrl,
             buyer: {
                 id: user.id,
@@ -100,9 +106,9 @@ function odemeBaslat({ user, tutar, callbackUrl, ip }) {
             },
             basketItems: [
                 {
-                    id: 'SMARTSTUDY-PREMIUM',
-                    name: 'SmartStudy Premium Üyelik',
-                    category1: 'Dijital Üyelik',
+                    id: 'SMARTSTUDY-PREMIUM-30GUN',
+                    name: 'SmartStudy Premium - 30 Günlük Erişim',
+                    category1: 'Dijital Ürün',
                     itemType: Iyzipay.BASKET_ITEM_TYPE.VIRTUAL,
                     price: fiyatMetni
                 }

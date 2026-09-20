@@ -18,7 +18,8 @@
 <body>
     <div class="pay-card">
         <h3 class="text-warning font-monospace mb-2 text-center" style="font-family:'Orbitron', sans-serif;"><i class="fas fa-lock me-2"></i>PREMİUM ÖDEME</h3>
-        <p class="text-secondary small text-center mb-4">SmartStudy Premium Üyelik - <%= premiumFiyat.toFixed(2) %> TL / ay</p>
+        <p class="text-secondary small text-center mb-1">SmartStudy Premium - 30 Günlük Erişim - <%= premiumFiyat.toFixed(2) %> TL</p>
+        <p class="text-muted text-center mb-4" style="font-size:11px;">Otomatik yenilenmez - süre bitince tekrar satın almalısın, kartın saklanmaz.</p>
 
         <% if (typeof odemeBasarisiz !== 'undefined' && odemeBasarisiz) { %>
             <div class="alert alert-danger small">Ödeme tamamlanamadı ya da iptal edildi. Tekrar deneyebilirsin.</div>

@@ -21,6 +21,11 @@ create table public.profiles (
     ad text not null,
     email text not null unique,
     level text not null default 'Free' check (level in ('Free', 'Premium')),
+    -- Premium artık otomatik yenilenen bir abonelik DEĞİL, 30 günlük tek
+    -- seferlik bir satın alma - bu tarih geçince level otomatik Free'ye
+    -- düşürülüyor (bkz. server.js currentUser()), ayrıca yaklaşınca
+    -- "yenile" hatırlatması gösteriliyor.
+    premium_bitis_tarihi timestamptz,
 
     -- Öğretmen alanları
     koc_kodu text unique,

@@ -310,6 +310,16 @@ async function currentUser(req) {
     if (!req.session.userId) return null;
     const { data, error } = await supabase.from('profiles').select('*').eq('id', req.session.userId).maybeSingle();
     if (error || !data) return null;
+
+    // Premium artık otomatik yenilenen bir abonelik değil, 30 günlük tek
+    // seferlik bir satın alma - süresi geçmişse burada (tembel/lazy kontrol,
+    // ayrı bir zamanlayıcı servisi kurmadan) otomatik Free'ye düşürülüyor.
+    if (data.level === 'Premium' && data.premium_bitis_tarihi && new Date(data.premium_bitis_tarihi) < new Date()) {
+        await supabase.from('profiles').update({ level: 'Free' }).eq('id', data.id);
+        data.level = 'Free';
+        if (req.session.userLevel) req.session.userLevel = 'Free';
+    }
+
     return data;
 }
 
@@ -338,6 +348,12 @@ async function resolveUser(req) {
 
     const { data, error } = await supabase.from('profiles').select('*').eq('id', tokenData.user.id).maybeSingle();
     if (error || !data) return null;
+
+    if (data.level === 'Premium' && data.premium_bitis_tarihi && new Date(data.premium_bitis_tarihi) < new Date()) {
+        await supabase.from('profiles').update({ level: 'Free' }).eq('id', data.id);
+        data.level = 'Free';
+    }
+
     return data;
 }
 
@@ -1105,7 +1121,16 @@ app.get('/dashboard', requireLogin, async (req, res) => {
                 ? (analizler[analizler.length - 1].sinav_turu || 'TYT')
                 : null;
 
-            res.render('dashboard-student', { user, analizler, examGroups, defaultActiveKey });
+            // Premium süresi 5 günden az kaldıysa (ya da bugün bittiyse)
+            // dashboard'da bir "yenile" hatırlatması gösteriliyor - artık
+            // otomatik yenilenen bir abonelik değil, öğrencinin kendi elle
+            // tekrar satın alması gerekiyor.
+            let premiumKalanGun = null;
+            if (user.level === 'Premium' && user.premium_bitis_tarihi) {
+                premiumKalanGun = Math.ceil((new Date(user.premium_bitis_tarihi) - new Date()) / 86400000);
+            }
+
+            res.render('dashboard-student', { user, analizler, examGroups, defaultActiveKey, premiumKalanGun });
         }
     } catch (error) {
         console.error(error);
@@ -1680,6 +1705,22 @@ app.get('/pomodoro', requireLogin, async (req, res) => {
 // Premium fiyatı - AÇIK NOKTA: gerçek fiyatı Berke belirleyecek, şimdilik
 // yer tutucu bir değer. Değiştirmek için sadece bu satırı güncellemek yeterli.
 const PREMIUM_FIYAT_TL = 99.90;
+const PREMIUM_SURE_GUN = 30;
+
+// Ödeme başarılı olunca çağrılan ortak fonksiyon - Premium'u 30 gün
+// (PREMIUM_SURE_GUN) süreyle veriyor. Kullanıcı süre dolmadan tekrar satın
+// alırsa (erken yenileme) süreyi MEVCUT bitiş tarihinin üzerine ekliyoruz,
+// zaten aktif olan Premium süresini kaybetmesin diye.
+async function premiumVer(userId) {
+    const { data: mevcutProfil } = await supabase.from('profiles').select('premium_bitis_tarihi').eq('id', userId).single();
+    const simdi = new Date();
+    const baslangic = mevcutProfil?.premium_bitis_tarihi && new Date(mevcutProfil.premium_bitis_tarihi) > simdi
+        ? new Date(mevcutProfil.premium_bitis_tarihi)
+        : simdi;
+    const yeniBitis = new Date(baslangic.getTime() + PREMIUM_SURE_GUN * 86400000);
+
+    await supabase.from('profiles').update({ level: 'Premium', premium_bitis_tarihi: yeniBitis.toISOString() }).eq('id', userId);
+}
 
 // AKTİF SAĞLAYICI: PayTR denemesi de vazgeçildi, iyzico'ya geri dönüldü -
 // üye iş yeri kaydındaki soruna destek@iyzico.com'a yazılıp çözüm bekleniyor.
@@ -1761,7 +1802,7 @@ app.post('/payment/notification', async (req, res) => {
         }).eq('referans', sonuc.merchantOid);
 
         if (sonuc.basarili && odemeKaydi) {
-            await supabase.from('profiles').update({ level: 'Premium' }).eq('id', odemeKaydi.user_id);
+            await premiumVer(odemeKaydi.user_id);
         }
 
         res.send('OK');
@@ -1791,7 +1832,7 @@ app.post('/payment/callback', async (req, res) => {
         }).eq('referans', token);
 
         if (sonuc.basarili && odemeKaydi) {
-            await supabase.from('profiles').update({ level: 'Premium' }).eq('id', odemeKaydi.user_id);
+            await premiumVer(odemeKaydi.user_id);
             if (req.session.userId === odemeKaydi.user_id) req.session.userLevel = 'Premium';
             return res.redirect('/dashboard?odeme=basarili');
         }
