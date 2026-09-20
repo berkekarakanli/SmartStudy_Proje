@@ -472,6 +472,13 @@ app.post('/teacher-setup', requireLogin, async (req, res) => {
 });
 
 app.get('/logout', (req, res) => {
+    const userId = req.session.userId;
+    if (userId) {
+        // Admin panelinde "en son ne zaman çıkış yaptı" gösterebilmek için -
+        // oturum zaten kapanıyor, bu güncellemenin bitmesini beklemeye gerek yok.
+        supabase.from('profiles').update({ son_cikis_tarihi: new Date().toISOString() }).eq('id', userId)
+            .then(({ error }) => { if (error) console.error('[son_cikis_tarihi]', error.message); });
+    }
     req.session.destroy(() => res.redirect('/'));
 });
 
@@ -697,6 +704,10 @@ app.post('/login', loginLimiter, async (req, res) => {
         }
 
         syncSessionUser(req, user);
+        // Admin panelinde "en son ne zaman giriş yaptı" gösterebilmek için -
+        // cevabı geciktirmemek adına kullanıcıyı bekletmeden (fire-and-forget).
+        supabase.from('profiles').update({ son_giris_tarihi: new Date().toISOString() }).eq('id', user.id)
+            .then(({ error }) => { if (error) console.error('[son_giris_tarihi]', error.message); });
         // "Beni hatırla" işaretliyse oturum çerezi 30 gün, değilse varsayılan
         // 24 saat sürüyor.
         if (req.body.rememberMe) {
@@ -2625,24 +2636,79 @@ app.post('/destek', sensitiveActionLimiter, async (req, res) => {
 // 10. ADMİN PANELİ (SADECE KURUCU)
 // ==========================================
 // Kim üye olmuş, kaç analiz/hata defteri kaydı girmiş gibi genel bir bakış
-// için basit, salt-okunur bir panel. Sadece ADMIN_EMAIL ile eşleşen
-// hesaba giriş yapmış kullanıcı görebiliyor - ayrı bir "admin" rolü/kolonu
-// eklemeye şimdilik gerek yok, tek yönetici (kurucu) olduğu için.
+// için basit, salt-okunur bir panel.
 //
-// GİZLİLİK: Kişisel bir e-posta adresini koda (dolayısıyla GitHub'a) hiç
-// yazmıyoruz - bu değer SADECE Render'ın Environment sekmesindeki
-// ADMIN_EMAIL değişkeninden geliyor. Tanımlı değilse /admin kimseye
-// açılmıyor (boş string hiçbir gerçek e-postayla eşleşmez).
+// BİLİNÇLİ TASARIM: Admin erişimi artık normal öğrenci/öğretmen girişinden
+// TAMAMEN BAĞIMSIZ - ayrı bir e-posta/şifre (ADMIN_EMAIL/ADMIN_PASSWORD) ile
+// ayrı bir oturum bayrağı (req.session.isAdmin) kullanıyor. Eskiden "şu an
+// giriş yapmış kullanıcının e-postası ADMIN_EMAIL'e eşit mi" diye bakıyordu -
+// yani normal hesabınla giriş yapıp adres çubuğuna /admin yazman yetiyordu.
+// Artık normal hesabın admin olsa bile, panele girmek için AYRICA bu admin
+// şifresini girmen gerekiyor.
+//
+// GİZLİLİK: Bu değerleri koda (dolayısıyla GitHub'a) hiç yazmıyoruz - SADECE
+// Render'ın Environment sekmesindeki ADMIN_EMAIL/ADMIN_PASSWORD
+// değişkenlerinden geliyor. Tanımlı değilse /admin kimseye açılmıyor.
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
-async function requireAdmin(req, res, next) {
-    const user = await currentUser(req);
-    if (!ADMIN_EMAIL || !user || String(user.email || '').toLowerCase() !== ADMIN_EMAIL) {
-        return res.status(404).send(errorPage('Sayfa Bulunamadı', 'Aradığınız rota mevcut değil.', '/dashboard'));
+function requireAdmin(req, res, next) {
+    if (!ADMIN_EMAIL || !ADMIN_PASSWORD || !req.session.isAdmin) {
+        return res.redirect('/admin/login');
     }
-    req.currentUser = user;
     next();
 }
+
+function adminLoginPage(hata) {
+    return `
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Admin Girişi - SmartStudy</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    </head>
+    <body class="bg-dark text-white d-flex align-items-center justify-content-center" style="min-height:100vh;">
+        <div class="card bg-secondary bg-opacity-10 border-secondary p-4" style="width:100%; max-width:380px;">
+            <h5 class="mb-3 text-center"><i class="fas fa-user-shield me-2 text-info"></i>Admin Girişi</h5>
+            ${hata ? `<div class="alert alert-danger py-2 small">${escapeHtml(hata)}</div>` : ''}
+            <form method="POST" action="/admin/login">
+                <div class="mb-3">
+                    <label class="form-label small text-secondary">Admin E-Posta</label>
+                    <input type="email" name="email" class="form-control bg-dark text-white border-secondary" required autofocus>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-secondary">Admin Şifre</label>
+                    <input type="password" name="password" class="form-control bg-dark text-white border-secondary" required>
+                </div>
+                <button type="submit" class="btn btn-info w-100 fw-bold text-dark">Giriş Yap</button>
+            </form>
+        </div>
+    </body>
+    </html>`;
+}
+
+app.get('/admin/login', (req, res) => {
+    if (req.session.isAdmin) return res.redirect('/admin');
+    res.send(adminLoginPage());
+});
+
+app.post('/admin/login', loginLimiter, (req, res) => {
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    if (!ADMIN_EMAIL || !ADMIN_PASSWORD || email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
+        return res.status(401).send(adminLoginPage('E-posta veya şifre hatalı.'));
+    }
+    req.session.isAdmin = true;
+    res.redirect('/admin');
+});
+
+app.get('/admin/logout', (req, res) => {
+    req.session.isAdmin = false;
+    res.redirect('/admin/login');
+});
 
 // Admin panelindeki değişiklikleri kaydediyoruz - "kim, ne zaman, neyi
 // değiştirdi" sorusuna cevap verebilmek için. Loglama başarısız olsa bile
@@ -2674,7 +2740,7 @@ function adminShell(activeTab, bodyHtml, stats) {
         <div class="container-fluid">
             <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                 <h1 class="h3 m-0"><i class="fas fa-user-shield me-2 text-info"></i>Admin Paneli</h1>
-                <a href="/dashboard" class="btn btn-outline-info btn-sm">Panele Dön</a>
+                <a href="/admin/logout" class="btn btn-outline-danger btn-sm">Admin Çıkışı</a>
             </div>
             ${stats ? `<p class="text-secondary">${stats}</p>` : ''}
             <ul class="nav nav-tabs mb-3 border-secondary">
@@ -2694,10 +2760,10 @@ function adminShell(activeTab, bodyHtml, stats) {
     </html>`;
 }
 
-app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
+app.get('/admin', requireAdmin, async (req, res) => {
     try {
         const [{ data: profiles }, { data: analizler }, { data: wrongQs }] = await Promise.all([
-            supabase.from('profiles').select('id, ad, email, role, level, kayit_tarihi, sinif, ayt_alani, hedef, tamamlanan_konular, zayif_konular').order('kayit_tarihi', { ascending: false }),
+            supabase.from('profiles').select('id, ad, email, role, level, kayit_tarihi, sinif, ayt_alani, hedef, tamamlanan_konular, zayif_konular, son_giris_tarihi, son_cikis_tarihi').order('kayit_tarihi', { ascending: false }),
             supabase.from('analizler').select('user_id'),
             supabase.from('wrong_questions').select('user_id')
         ]);
@@ -2717,6 +2783,8 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
                 tamamlanan_konular: p.tamamlanan_konular || {}, zayif_konular: p.zayif_konular || {}
             };
             const aiKocTitle = escapeHtml(JSON.stringify(aiKocDetay, null, 1));
+            const sonGirisMetni = p.son_giris_tarihi ? new Date(p.son_giris_tarihi).toLocaleString('tr-TR') : '-';
+            const sonCikisMetni = p.son_cikis_tarihi ? new Date(p.son_cikis_tarihi).toLocaleString('tr-TR') : '-';
             return `
             <tr>
                 <td>${escapeHtml(p.ad || '-')}</td>
@@ -2724,10 +2792,12 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
                 <td><span class="badge ${p.role === 'teacher' ? 'bg-warning text-dark' : 'bg-info text-dark'}">${p.role === 'teacher' ? 'Öğretmen' : 'Öğrenci'}</span></td>
                 <td><span class="badge ${p.level === 'Premium' ? 'bg-success' : 'bg-secondary'}">${escapeHtml(p.level || 'Free')}</span></td>
                 <td>${p.kayit_tarihi ? new Date(p.kayit_tarihi).toLocaleDateString('tr-TR') : '-'}</td>
+                <td class="small" title="Çıkış: ${sonCikisMetni}">${sonGirisMetni}</td>
                 <td class="text-center">${analizSayaci[p.id] || 0}</td>
                 <td class="text-center">${hataSayaci[p.id] || 0}</td>
                 <td class="text-center" title="${aiKocTitle}">${p.sinif ? `<span class="badge bg-info text-dark" style="cursor:help;">${escapeHtml(p.sinif)}</span>` : '<span class="text-secondary">-</span>'}</td>
                 <td class="d-flex flex-wrap gap-1">
+                    <a href="/admin/kullanici/${escapeHtml(p.id)}" class="btn btn-sm btn-outline-info">Detay</a>
                     <form method="POST" action="/admin/set-level">
                         <input type="hidden" name="userId" value="${escapeHtml(p.id)}">
                         <input type="hidden" name="level" value="${yeniSeviye}">
@@ -2757,13 +2827,14 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
                             <th>Rol</th>
                             <th>Seviye</th>
                             <th>Kayıt Tarihi</th>
+                            <th title="Fareyle üzerine gelince son çıkış tarihini de gösterir">Son Giriş</th>
                             <th class="text-center">Analiz Sayısı</th>
                             <th class="text-center">Hata Defteri</th>
                             <th class="text-center" title="Fareyle üzerine gelince AI Koç'ta topladığı tüm bilgiyi gösterir">AI Koç</th>
                             <th>İşlemler</th>
                         </tr>
                     </thead>
-                    <tbody>${rows || '<tr><td colspan="9" class="text-center text-secondary">Henüz kullanıcı yok.</td></tr>'}</tbody>
+                    <tbody>${rows || '<tr><td colspan="10" class="text-center text-secondary">Henüz kullanıcı yok.</td></tr>'}</tbody>
                 </table>
             </div>`;
 
@@ -2778,7 +2849,102 @@ app.get('/admin', requireLogin, requireAdmin, async (req, res) => {
     }
 });
 
-app.post('/admin/set-level', requireLogin, requireAdmin, async (req, res) => {
+// Tek bir kullanıcının tüm geçmişini tek sayfada gösteren detay ekranı -
+// ödeme geçmişi, net analizleri, hata defteri VE AI Koç'la yaptığı TÜM
+// sohbet (bkz. aşağıdaki not). Otomatik bir "müstehcen içerik" tespiti
+// YAPMIYORUZ (bu ayrı, güvenilirliği tartışmalı bir yapay zeka sınıflandırma
+// işi olurdu) - bunun yerine sohbetin tamamını okunabilir şekilde gösteriyoruz,
+// gerekiyorsa admin kendi gözüyle kontrol eder.
+app.get('/admin/kullanici/:id', requireAdmin, async (req, res) => {
+    try {
+        const userId = req.params.id;
+        const [{ data: profil }, { data: odemeler }, { data: analizler }, { data: hatalar }, { data: mesajlar }, { data: odevler }] = await Promise.all([
+            supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+            supabase.from('odemeler').select('*').eq('user_id', userId).order('tarih', { ascending: false }),
+            supabase.from('analizler').select('*').eq('user_id', userId).order('tarih', { ascending: false }).limit(15),
+            supabase.from('wrong_questions').select('id, subject, ai_solution, tarih').eq('user_id', userId).order('tarih', { ascending: false }).limit(15),
+            supabase.from('ai_mesajlar').select('rol, mesaj, tarih').eq('user_id', userId).order('tarih', { ascending: true }).limit(300),
+            supabase.from('homeworks').select('completed').eq('student_id', userId)
+        ]);
+
+        if (!profil) return res.status(404).send(errorPage('Bulunamadı', 'Bu kullanıcı bulunamadı.', '/admin'));
+
+        const odevTamamlanan = (odevler || []).filter(o => o.completed).length;
+
+        const odemeSatirlari = (odemeler || []).map(o => `
+            <tr>
+                <td>${new Date(o.tarih).toLocaleString('tr-TR')}</td>
+                <td>${escapeHtml(o.saglayici)}</td>
+                <td>${Number(o.tutar).toFixed(2)} TL</td>
+                <td><span class="badge ${o.durum === 'basarili' ? 'bg-success' : (o.durum === 'basarisiz' ? 'bg-danger' : 'bg-secondary')}">${escapeHtml(o.durum)}</span></td>
+            </tr>`).join('') || '<tr><td colspan="4" class="text-center text-secondary">Ödeme kaydı yok.</td></tr>';
+
+        const analizSatirlari = (analizler || []).map(a => `
+            <tr>
+                <td>${new Date(a.tarih).toLocaleDateString('tr-TR')}</td>
+                <td>${escapeHtml(a.sinav_turu)}</td>
+                <td>${Number(a.toplam_net).toFixed(2)}</td>
+            </tr>`).join('') || '<tr><td colspan="3" class="text-center text-secondary">Analiz kaydı yok.</td></tr>';
+
+        const hataSatirlari = (hatalar || []).map(h => `
+            <tr>
+                <td>${new Date(h.tarih).toLocaleDateString('tr-TR')}</td>
+                <td>${escapeHtml(h.subject || '-')}</td>
+                <td class="small">${escapeHtml((h.ai_solution || '').slice(0, 120))}</td>
+            </tr>`).join('') || '<tr><td colspan="3" class="text-center text-secondary">Hata defteri kaydı yok.</td></tr>';
+
+        const sohbetHtml = (mesajlar || []).map(m => `
+            <div class="d-flex ${m.rol === 'user' ? 'justify-content-end' : 'justify-content-start'} mb-2">
+                <div class="p-2 rounded small" style="max-width:75%; background:${m.rol === 'user' ? '#0dcaf0' : '#1e293b'}; color:${m.rol === 'user' ? '#04202b' : '#e2e8f0'};">
+                    <div style="white-space:pre-wrap;">${escapeHtml(m.mesaj)}</div>
+                    <div class="text-secondary" style="font-size:10px; margin-top:2px;">${new Date(m.tarih).toLocaleString('tr-TR')}</div>
+                </div>
+            </div>`).join('') || '<p class="text-secondary small">Henüz AI Koç ile sohbet yok.</p>';
+
+        const body = `
+            <a href="/admin" class="btn btn-outline-secondary btn-sm mb-3"><i class="fas fa-arrow-left me-1"></i>Kullanıcı Listesine Dön</a>
+            <div class="card bg-secondary bg-opacity-10 border-secondary p-3 mb-4">
+                <h5 class="mb-1">${escapeHtml(profil.ad || '-')} <span class="text-secondary small">${escapeHtml(profil.email)}</span></h5>
+                <div class="small text-secondary">
+                    Rol: <strong class="text-white">${profil.role === 'teacher' ? 'Öğretmen' : 'Öğrenci'}</strong> ·
+                    Seviye: <strong class="text-white">${escapeHtml(profil.level || 'Free')}</strong> ·
+                    Kayıt: <strong class="text-white">${profil.kayit_tarihi ? new Date(profil.kayit_tarihi).toLocaleDateString('tr-TR') : '-'}</strong> ·
+                    Son Giriş: <strong class="text-white">${profil.son_giris_tarihi ? new Date(profil.son_giris_tarihi).toLocaleString('tr-TR') : '-'}</strong> ·
+                    Son Çıkış: <strong class="text-white">${profil.son_cikis_tarihi ? new Date(profil.son_cikis_tarihi).toLocaleString('tr-TR') : '-'}</strong>
+                </div>
+                <div class="small text-secondary mt-1">
+                    Sınıf: <strong class="text-white">${escapeHtml(profil.sinif || '-')}</strong> ·
+                    AYT Alanı: <strong class="text-white">${escapeHtml(profil.ayt_alani || '-')}</strong> ·
+                    Ödev Tamamlama: <strong class="text-white">${odevTamamlanan}/${(odevler || []).length}</strong>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <h6 class="text-info">Ödeme Geçmişi</h6>
+                    <div class="table-responsive"><table class="table table-dark table-sm table-striped"><thead><tr><th>Tarih</th><th>Sağlayıcı</th><th>Tutar</th><th>Durum</th></tr></thead><tbody>${odemeSatirlari}</tbody></table></div>
+
+                    <h6 class="text-info mt-3">Net Analizleri (son 15)</h6>
+                    <div class="table-responsive"><table class="table table-dark table-sm table-striped"><thead><tr><th>Tarih</th><th>Sınav</th><th>Toplam Net</th></tr></thead><tbody>${analizSatirlari}</tbody></table></div>
+
+                    <h6 class="text-info mt-3">Hata Defteri (son 15)</h6>
+                    <div class="table-responsive"><table class="table table-dark table-sm table-striped"><thead><tr><th>Tarih</th><th>Ders</th><th>Not</th></tr></thead><tbody>${hataSatirlari}</tbody></table></div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="text-info">AI Koç Sohbeti (son 300 mesaj)</h6>
+                    <p class="text-secondary" style="font-size:11px;">Otomatik içerik denetimi yapılmıyor - uygunsuz bir şey olup olmadığını buradan kendin gözden geçirebilirsin.</p>
+                    <div style="max-height:600px; overflow-y:auto; background:#0f172a; border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:12px;">${sohbetHtml}</div>
+                </div>
+            </div>`;
+
+        res.send(adminShell('kullanicilar', body, null));
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Sunucu Hatası', 'Kullanıcı detayı yüklenemedi.', '/admin'));
+    }
+});
+
+app.post('/admin/set-level', requireAdmin, async (req, res) => {
     try {
         const { userId, level } = req.body;
         if (!userId || (level !== 'Free' && level !== 'Premium')) {
@@ -2786,7 +2952,7 @@ app.post('/admin/set-level', requireLogin, requireAdmin, async (req, res) => {
         }
         const { data: hedef } = await supabase.from('profiles').select('email').eq('id', userId).maybeSingle();
         await supabase.from('profiles').update({ level }).eq('id', userId);
-        await logAdminAction(req.currentUser.email, 'Seviye değiştirildi', hedef?.email, `Yeni seviye: ${level}`);
+        await logAdminAction(ADMIN_EMAIL, 'Seviye değiştirildi', hedef?.email, `Yeni seviye: ${level}`);
         res.redirect('/admin');
     } catch (error) {
         console.error(error);
@@ -2794,7 +2960,7 @@ app.post('/admin/set-level', requireLogin, requireAdmin, async (req, res) => {
     }
 });
 
-app.post('/admin/set-role', requireLogin, requireAdmin, async (req, res) => {
+app.post('/admin/set-role', requireAdmin, async (req, res) => {
     try {
         const { userId, role } = req.body;
         if (!userId || (role !== 'student' && role !== 'teacher')) {
@@ -2802,7 +2968,7 @@ app.post('/admin/set-role', requireLogin, requireAdmin, async (req, res) => {
         }
         const { data: hedef } = await supabase.from('profiles').select('email').eq('id', userId).maybeSingle();
         await supabase.from('profiles').update({ role }).eq('id', userId);
-        await logAdminAction(req.currentUser.email, 'Rol değiştirildi', hedef?.email, `Yeni rol: ${role}`);
+        await logAdminAction(ADMIN_EMAIL, 'Rol değiştirildi', hedef?.email, `Yeni rol: ${role}`);
         res.redirect('/admin');
     } catch (error) {
         console.error(error);
@@ -2810,7 +2976,7 @@ app.post('/admin/set-role', requireLogin, requireAdmin, async (req, res) => {
     }
 });
 
-app.post('/admin/delete-user', requireLogin, requireAdmin, async (req, res) => {
+app.post('/admin/delete-user', requireAdmin, async (req, res) => {
     try {
         const { userId } = req.body;
         if (!userId) {
@@ -2821,7 +2987,7 @@ app.post('/admin/delete-user', requireLogin, requireAdmin, async (req, res) => {
         // ona bağlı analizler/hata defteri kayıtlarını da otomatik siliyor.
         const { error } = await supabase.auth.admin.deleteUser(userId);
         if (error) console.error(error);
-        await logAdminAction(req.currentUser.email, 'Hesap silindi', hedef?.email);
+        await logAdminAction(ADMIN_EMAIL, 'Hesap silindi', hedef?.email);
         res.redirect('/admin');
     } catch (error) {
         console.error(error);
@@ -2829,7 +2995,7 @@ app.post('/admin/delete-user', requireLogin, requireAdmin, async (req, res) => {
     }
 });
 
-app.get('/admin/destek', requireLogin, requireAdmin, async (req, res) => {
+app.get('/admin/destek', requireAdmin, async (req, res) => {
     try {
         const { data: talepler } = await supabase.from('destek_talepleri').select('*').order('tarih', { ascending: false });
 
@@ -2841,7 +3007,8 @@ app.get('/admin/destek', requireLogin, requireAdmin, async (req, res) => {
                 <td>${escapeHtml(t.konu || '-')}</td>
                 <td style="max-width: 380px; white-space: pre-wrap;">${escapeHtml(t.mesaj || '-')}</td>
                 <td><span class="badge ${t.durum === 'yeni' ? 'bg-warning text-dark' : 'bg-secondary'}">${escapeHtml(t.durum || 'yeni')}</span></td>
-                <td>
+                <td class="d-flex flex-wrap gap-1">
+                    ${t.user_id ? `<a href="/admin/kullanici/${escapeHtml(t.user_id)}" class="btn btn-sm btn-outline-info">Kullanıcı Detayı</a>` : ''}
                     ${t.durum === 'yeni' ? `
                     <form method="POST" action="/admin/destek/durum">
                         <input type="hidden" name="id" value="${escapeHtml(t.id)}">
@@ -2881,7 +3048,7 @@ app.get('/admin/destek', requireLogin, requireAdmin, async (req, res) => {
     }
 });
 
-app.post('/admin/destek/durum', requireLogin, requireAdmin, async (req, res) => {
+app.post('/admin/destek/durum', requireAdmin, async (req, res) => {
     try {
         const { id, durum } = req.body;
         if (!id || !durum) {
@@ -2889,7 +3056,7 @@ app.post('/admin/destek/durum', requireLogin, requireAdmin, async (req, res) => 
         }
         const { data: hedef } = await supabase.from('destek_talepleri').select('email').eq('id', id).maybeSingle();
         await supabase.from('destek_talepleri').update({ durum }).eq('id', id);
-        await logAdminAction(req.currentUser.email, 'Destek talebi durumu değiştirildi', hedef?.email, `Yeni durum: ${durum}`);
+        await logAdminAction(ADMIN_EMAIL, 'Destek talebi durumu değiştirildi', hedef?.email, `Yeni durum: ${durum}`);
         res.redirect('/admin/destek');
     } catch (error) {
         console.error(error);
@@ -2897,7 +3064,7 @@ app.post('/admin/destek/durum', requireLogin, requireAdmin, async (req, res) => 
     }
 });
 
-app.get('/admin/log', requireLogin, requireAdmin, async (req, res) => {
+app.get('/admin/log', requireAdmin, async (req, res) => {
     try {
         const { data: kayitlar } = await supabase.from('admin_log').select('*').order('tarih', { ascending: false }).limit(200);
 

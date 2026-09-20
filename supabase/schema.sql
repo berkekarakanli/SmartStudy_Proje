@@ -85,7 +85,12 @@ create table public.profiles (
     -- yeni bir program üretildi - 7 günden fazla geçtiyse sohbette otomatik
     -- olarak yeni bir haftalık program duyurulur.
     hafta_no integer not null default 0,
-    haftalik_program_tarihi timestamptz
+    haftalik_program_tarihi timestamptz,
+
+    -- Admin panelinde "kim en son ne zaman giriş/çıkış yaptı" görebilmek için
+    -- - /login ve /logout rotalarında güncelleniyor.
+    son_giris_tarihi timestamptz,
+    son_cikis_tarihi timestamptz
 );
 
 create index idx_profiles_referral_code on public.profiles(referral_code);
