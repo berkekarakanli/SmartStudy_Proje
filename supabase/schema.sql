@@ -365,3 +365,31 @@ create index idx_odemeler_user_id on public.odemeler(user_id);
 create index idx_odemeler_referans on public.odemeler(referans);
 
 alter table public.odemeler enable row level security;
+
+-- ==========================================
+-- KONU_ANALIZLERI (net girişinden sonra konu bazlı doğru/yanlış/boş şablonu)
+-- ==========================================
+-- Serbest sohbette "hangi konudan yanlış yaptın" diye sormak yerine, net
+-- girişinden hemen sonra öğrenciye o dersin konularını listeleyip her biri
+-- için doğru/yanlış/boş sayısı giren bir şablon gösteriyoruz - hem daha
+-- güvenilir veri (serbest metinden konu çıkarmaya çalışmak yerine) hem de
+-- yapay zeka beklemeden ANINDA analiz üretebiliyoruz (bkz. server.js
+-- /api/net-analiz/konu-detay). Aynı konu birden fazla girişte tekrar
+-- yanlış/boş çıkarsa (bkz. server.js'teki tekrar tespiti), ödev planında
+-- normalden daha yüksek öncelik/soru sayısı alıyor.
+create table public.konu_analizleri (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references public.profiles(id) on delete cascade,
+    analiz_id uuid references public.analizler(id) on delete set null,
+    ders text not null,
+    konu text not null,
+    dogru integer not null default 0,
+    yanlis integer not null default 0,
+    bos integer not null default 0,
+    tarih timestamptz not null default now()
+);
+
+create index idx_konu_analizleri_user_ders_konu on public.konu_analizleri(user_id, ders, konu);
+create index idx_konu_analizleri_analiz_id on public.konu_analizleri(analiz_id);
+
+alter table public.konu_analizleri enable row level security;

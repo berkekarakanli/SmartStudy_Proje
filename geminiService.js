@@ -257,7 +257,7 @@ Kurallar (kesinlikle uy):
  * @param {Record<string, number>} [girdi.hataDefteriDersSayilari] - { dersAdi: kaç adet hata defteri kaydı var } - içerik/not analiz edilmez, sadece hangi derste tekrar var diye sayılır.
  * @returns {Promise<{ odevler: Array<{ders:string, konular:string[], soru_sayisi:number, gun:string}> }|null>}
  */
-async function generateHomeworkPlan({ sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular, izinliMufredat, sinavTarihi, kalanGun, sonAnalizler, hataDefteriDersSayilari }) {
+async function generateHomeworkPlan({ sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular, tekrarEdenZayifKonular, izinliMufredat, sinavTarihi, kalanGun, sonAnalizler, hataDefteriDersSayilari }) {
     if (!ai) return null;
 
     try {
@@ -274,6 +274,15 @@ async function generateHomeworkPlan({ sinif, sinavTuru, aytAlani, hedef, tamamla
         // konular - net yüzdesinden bile daha güvenilir bir sinyal, bu
         // yüzden plana EN YÜKSEK öncelikle giriyor (bkz. aşağıdaki kural).
         const zayifMetni = Object.entries(zayifKonular || {})
+            .filter(([, konular]) => Array.isArray(konular) && konular.length > 0)
+            .map(([ders, konular]) => `- ${ders}: ${konular.join(', ')}`)
+            .join('\n');
+
+        // Konu bazlı (doğru/yanlış/boş) şablondan gelen, ÜST ÜSTE birden fazla
+        // girişte yanlış/boş çıkan konular - bkz. server.js
+        // /api/net-analiz/konu-detay. Bu, "zayıf konular"ın bile üstünde bir
+        // aciliyet sinyali: öğrenci tekrar çalışmasına rağmen hâlâ hata yapıyor.
+        const tekrarEdenMetni = Object.entries(tekrarEdenZayifKonular || {})
             .filter(([, konular]) => Array.isArray(konular) && konular.length > 0)
             .map(([ders, konular]) => `- ${ders}: ${konular.join(', ')}`)
             .join('\n');
@@ -310,6 +319,9 @@ ${tamamlananMetni || 'Henüz bildirilmemiş.'}
 Öğrencinin KENDİ AĞZINDAN "bu konuda yanlış yapıyorum/zorlanıyorum" dediği konular (EN YÜKSEK öncelik burada, net yüzdesinden bile önemli):
 ${zayifMetni || 'Henüz bildirilmemiş.'}
 
+TEKRARLAYAN HATA UYARISI - öğrencinin konu bazlı analiz şablonunda ÜST ÜSTE birden fazla girişte yanlış/boş yaptığı konular (bunlar zayıf konulardan bile daha acil - önceki çalışmaya rağmen hâlâ çözülmemiş, mutlaka normalden daha yüksek soru_sayisi ver ve programda yer aç):
+${tekrarEdenMetni || 'Tekrarlayan bir hata yok.'}
+
 Son deneme/net analizi geçmişi (en yeniden eskiye, tek bir sınava göre değil bu geçmişe göre karar ver):
 ${netGecmisiMetni || 'veri yok'}
 
@@ -324,6 +336,7 @@ Kurallar (kesinlikle uy):
 - Konular SADECE "İZİN VERİLEN MÜFREDAT" listesinden seçilecek, listede olmayan hiçbir konu adı kullanılmayacak. "ders" alanı da İZİN VERİLEN MÜFREDAT'taki ders adının BİREBİR AYNISI olmalı (örn. "Türkçe" değil, tam olarak "Türkçe / Türk Dili ve Edebiyatı" yaz - listede nasıl yazıyorsa öyle).
 - SABİT/DOGMA bir sıralama yok, dinamik karar ver: net başarı yüzdesi yüksek (örn. 120 üzerinden 100+ gibi) bir öğrenciye müfredatın en başındaki temel/giriş konularını önerme - onun yerine deneme geçmişinde SÜREKLİ zayıf çıkan derse ve zaten bitirdiği konulara bakıp SPESİFİK, ileri seviye eksiğe odaklan. Net başarı yüzdesi düşükse temel konulardan başlamak uygun olabilir.
 - "Öğrencinin KENDİ AĞZINDAN belirttiği zayıf konular" varsa bunlar HER ZAMAN plandaki EN ÖNCELİKLİ satırlar olmalı - net yüzdesi o derste yüksek görünse bile (örn. bir dersten 120 üzerinden 119 alsa bile), öğrenci kendi söylemişse o konu mutlaka programa girer.
+- "TEKRARLAYAN HATA UYARISI" listesindeki konular MUTLAKA programa girer ve o konunun soru_sayisi'sini aynı dersteki diğer satırlardan gözle görülür şekilde YÜKSEK tut (örn. normalde 10-15 soru önerilecek bir konu tekrarlıyorsa 20-30 soru öner) - öğrenci bu konuda birden fazla kez hata yaptığı için standart dozaj yetmiyor.
 - Zayıflık tespitini TEK bir denemeye göre değil, verilen deneme geçmişinin ORTALAMASINA göre yap - bir derste tek seferlik düşük net rastlantı olabilir, birkaç denemede tekrar eden düşüklük gerçek zayıflıktır.
 - Hata defterini derinlemesine analiz etmeye ya da içeriğinden konu tahmin etmeye ÇALIŞMA - sadece hangi derslerde hata defteri kaydı biriktiğini gör ve o dersler için ayrıca "bu dersteki hata defteri kayıtlarını tekrar et" şeklinde basit bir hatırlatma/tekrar ödevi ekleyebilirsin, derin analiz gerekmez.
 - Tüm YENİ (henüz bitirilmemiş) konuların sınavdan EN AZ 30 gün önce bitmiş olması gerektiğini varsayarak plan yap; kalan son 30 gün tekrar/deneme dönemi olduğu için oraya yeni konu koyma.

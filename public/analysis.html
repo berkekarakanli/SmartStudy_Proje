@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="view-transition" content="same-origin">
+    <link rel="icon" type="image/svg+xml" href="/assets/logo-app-icon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
+    <link rel="apple-touch-icon" href="/assets/favicon-180.png">
     <style>@media (prefers-reduced-motion: no-preference) { ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .22s; } }</style>
     <title>SmartStudy | <%= isStudent ? 'Net Analizi & Terminal' : 'Eğitim Koçu Terminali' %></title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Inter:wght@300;500;700&display=swap" rel="stylesheet">
@@ -145,10 +148,10 @@
                     <h5 class="modal-title"><i class="fas fa-circle-check text-success me-2"></i>Netlerin Kaydedildi!</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body small text-secondary">Bu netleri AI Koç'un analiz etmesini, zayıf/güçlü yönlerini görmesini ister misin?</div>
+                <div class="modal-body small text-secondary">Yanlış/boş çıkan derslerde hangi konudan kaç doğru/yanlış/boş yaptığını gir, sana hemen (yapay zeka beklemeden) konu konu ne kadar soru çözmen gerektiğini söyleyelim.</div>
                 <div class="modal-footer border-secondary">
                     <a href="/dashboard" class="btn btn-outline-secondary btn-sm">Şimdi Değil</a>
-                    <a href="/student-coach#ai-koc" class="btn btn-info btn-sm fw-bold text-dark"><i class="fas fa-brain me-1"></i>Evet, AI Koç'a Git</a>
+                    <a href="/dashboard" id="konuDetayBtn" class="btn btn-info btn-sm fw-bold text-dark"><i class="fas fa-list-check me-1"></i>Konu Bazlı Analiz Yap</a>
                 </div>
             </div>
         </div>
@@ -449,6 +452,7 @@
             window.submitAnalysis = async function () {
                 const fields = studentExamData[activeKey()] || [];
                 const inputs = document.querySelectorAll('#netGrid input');
+                let hataVarMi = false;
                 for (const inp of inputs) {
                     const field = fields.find(f => f.id === inp.dataset.field);
                     const val = Number(inp.value || '0');
@@ -458,6 +462,7 @@
                         inp.focus();
                         return;
                     }
+                    if (val < field.max) hataVarMi = true;
                 }
 
                 const spinner = document.getElementById('saveSpinner');
@@ -479,11 +484,19 @@
                         body: JSON.stringify(body)
                     });
                     if (res.ok) {
-                        // Kaydettikten sonra doğrudan dashboard'a atmak yerine,
-                        // kullanıcıya "bunu AI Koç'a analiz ettir" seçeneği
-                        // sunuyoruz - netler artık veritabanında olduğu için
-                        // AI Koç bunları oradan çekip gerçek bir yorum üretebilir.
-                        new bootstrap.Modal(document.getElementById('netKaydedildiModal')).show();
+                        const data = await res.json();
+                        if (hataVarMi && data.id) {
+                            // Yanlış/boş varsa konu bazlı (doğru/yanlış/boş)
+                            // şablona yönlendiriyoruz - serbest sohbette "hangi
+                            // konudan yanlış yaptın" diye sorup uzun bir AI
+                            // konuşmasına girmek yerine, anında ve daha
+                            // güvenilir bir analiz için.
+                            document.getElementById('konuDetayBtn').href = '/net-analiz/' + data.id + '/konu-detay';
+                            new bootstrap.Modal(document.getElementById('netKaydedildiModal')).show();
+                        } else {
+                            showToast('Tebrikler, tüm sorular doğru! Net kaydedildi.', 'success');
+                            setTimeout(() => { window.location.href = '/dashboard'; }, 900);
+                        }
                     } else {
                         const data = await res.json().catch(() => ({}));
                         showToast(data.message || 'Sunucu işlem hatası döndü!', 'error');

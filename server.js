@@ -12,7 +12,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const ejs = require('ejs');
 const { readNetFromOpticImage, generateHomeworkPlan, generateChatReply } = require('./geminiService');
-const { EXAM_DATES, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getTumDersler } = require('./curriculum');
+const { EXAM_DATES, NET_ALANLARI, SYLLABUS, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getTumDersler, getKonuBreakdownDersleri } = require('./curriculum');
 const { odemeBaslat, odemeDogrula, iyzicoAktif } = require('./iyzicoService');
 const { odemeBaslat: paytrOdemeBaslat, bildirimDogrula: paytrBildirimDogrula, paytrAktif } = require('./paytrService');
 
@@ -73,6 +73,9 @@ app.use(express.json({ limit: '12mb' }));
 // gerçek kullanıcı verisiyle doldurulması gereken .html şablonları da var;
 // blanket bir express.static bunları render edilmemiş/ham haliyle sızdırırdı.
 app.use('/audio', express.static(path.join(__dirname, 'public', 'audio')));
+// Logo/favicon gibi statik marka görselleri - aynı gerekçeyle ayrı bir
+// alt klasör olarak servis ediliyor (bkz. yukarıdaki /audio notu).
+app.use('/assets', express.static(path.join(__dirname, 'public', 'assets')));
 
 // Ortama göre çerez ayarı (Lokalde false, canlıda (Render/Firebase) true ve none olur)
 const isProduction = process.env.NODE_ENV === 'production';
@@ -1349,7 +1352,7 @@ const GECERLI_GUNLER = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma',
 // yeniHafta:true -> hafta_no'yu bir artırır, yeni haftanın ödevlerini
 // oluşturur, en eski (yeni hafta_no - 2 ve öncesi) AI ödevlerini siler ve
 // haftalık programı okunabilir bir sohbet mesajı olarak duyurur.
-async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlananKonular, zayifKonular }, { yeniHafta }) {
+async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlananKonular, zayifKonular, tekrarEdenZayifKonular }, { yeniHafta }) {
     const aytGerekli = sinif === '11' || sinif === '12' || sinif === 'Mezun';
     const { sinavTuru, dersler: izinliMufredat } = getMufredat(sinif, aytGerekli ? aytAlani : undefined);
     const examKey = sinavTuru === 'TYT+AYT' ? 'AYT' : sinavTuru;
@@ -1362,7 +1365,7 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
     (hataKayitlari || []).forEach(h => { hataDefteriDersSayilari[h.subject] = (hataDefteriDersSayilari[h.subject] || 0) + 1; });
 
     const plan = await generateHomeworkPlan({
-        sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular,
+        sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular, tekrarEdenZayifKonular,
         izinliMufredat, sinavTarihi, kalanGun, sonAnalizler: sonAnalizler || [], hataDefteriDersSayilari
     });
     if (!plan || !Array.isArray(plan.odevler)) return;
@@ -2015,6 +2018,164 @@ app.post('/generate-plan', requireUser, async (req, res) => {
         console.error(error);
         if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Analiz kaydedilemedi.' });
         res.status(500).send(errorPage('Hata', 'Analiz kaydedilemedi.', '/plan'));
+    }
+});
+
+// ==========================================
+// KONU BAZLI ANALİZ ŞABLONU - net girişinden hemen sonra, serbest sohbette
+// "hangi konudan yanlış yaptın" diye sorup bir saat AI ile konuşmak yerine,
+// hatalı çıkan alanların konularını listeleyip her biri için doğru/yanlış/
+// boş sayısı giren bir şablon gösteriyoruz. Sonuç YAPAY ZEKA BEKLENMEDEN
+// (kurala dayalı, anında) hesaplanır - AI Koç sadece arka planda haftalık
+// programı sessizce günceller (bkz. aşağıdaki odevPlaniUretVeUygula çağrısı).
+// ==========================================
+app.get('/net-analiz/:analizId/konu-detay', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.redirect('/login');
+
+        const { data: analiz } = await supabase.from('analizler').select('*').eq('id', req.params.analizId).eq('user_id', user.id).maybeSingle();
+        if (!analiz) return res.status(404).send(errorPage('Bulunamadı', 'Bu analiz kaydı bulunamadı.', '/dashboard'));
+
+        const alanlar = NET_ALANLARI[analiz.sinav_turu] || [];
+        // Sadece tam net alınamayan (en az bir soru kaçırılan) alanlar için
+        // konu detayı isteniyor - mükemmel net alınan bir derste tekrar
+        // sormanın anlamı yok.
+        const eksikAlanlar = alanlar.filter(a => Number(analiz.detaylar?.[a.id] ?? 0) < a.max);
+
+        const dersGruplari = [];
+        const gorulenDersler = new Set();
+        eksikAlanlar.forEach(alan => {
+            getKonuBreakdownDersleri(analiz.sinav_turu, alan.id).forEach(({ ders, konular }) => {
+                if (gorulenDersler.has(ders)) return;
+                gorulenDersler.add(ders);
+                dersGruplari.push({ ders, konular });
+            });
+        });
+
+        if (dersGruplari.length === 0) return res.redirect('/dashboard');
+
+        res.render('konu-detay', { user, analiz, dersGruplari });
+    } catch (error) {
+        console.error(error);
+        res.status(500).send(errorPage('Hata', 'Konu detayı yüklenirken sorun oluştu.', '/dashboard'));
+    }
+});
+
+app.post('/api/net-analiz/konu-detay', requireLogin, async (req, res) => {
+    try {
+        const user = await currentUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const analizId = typeof req.body.analizId === 'string' ? req.body.analizId : null;
+        const kayitlarHam = Array.isArray(req.body.kayitlar) ? req.body.kayitlar : [];
+        if (kayitlarHam.length === 0) return res.status(400).json({ success: false, message: 'Kayıt gönderilmedi.' });
+
+        // İstemciden gelen ders/konu adlarının GERÇEKTEN müfredatta var
+        // olduğunu doğrulamak için tüm SYLLABUS'u tarayıp bir izin listesi
+        // çıkarıyoruz - uydurma/bozuk bir ad gelirse o satır sessizce atlanır.
+        const izinliKonular = new Set();
+        Object.values(SYLLABUS).forEach(dersler => {
+            Object.entries(dersler).forEach(([ders, konular]) => {
+                konular.forEach(konu => izinliKonular.add(ders + '||' + konu));
+            });
+        });
+
+        const temizle = (v) => {
+            const n = Math.round(Number(v));
+            return Number.isFinite(n) && n >= 0 ? Math.min(n, 99) : 0;
+        };
+
+        const kayitlar = kayitlarHam
+            .filter(k => k && typeof k.ders === 'string' && typeof k.konu === 'string' && izinliKonular.has(k.ders + '||' + k.konu))
+            .map(k => ({ ders: k.ders, konu: k.konu, dogru: temizle(k.dogru), yanlis: temizle(k.yanlis), bos: temizle(k.bos) }))
+            // Öğrencinin hiç dokunmadığı (hepsi 0) satırlar "hatırlamıyor/atla"
+            // anlamına gelir, yanlış/zayıf olarak işlenmesin.
+            .filter(k => k.dogru + k.yanlis + k.bos > 0);
+
+        if (kayitlar.length === 0) return res.status(400).json({ success: false, message: 'Geçerli bir kayıt yok, en az bir konuya değer gir.' });
+
+        // Aynı ders/konu için ÖNCEDEN (bu istekten önce) yanlış/boş kaydı var
+        // mıydı - varsa ve şimdi de yanlış/boş çıkıyorsa "tekrarlayan hata"
+        // sayılır ve ödev planında normalden yüksek öncelik alır.
+        const { data: oncekiKayitlar } = await supabase.from('konu_analizleri').select('ders, konu, yanlis, bos').eq('user_id', user.id);
+        const oncedenZayifSet = new Set(
+            (oncekiKayitlar || []).filter(k => (k.yanlis || 0) + (k.bos || 0) > 0).map(k => k.ders + '||' + k.konu)
+        );
+
+        const { error: kayitHatasi } = await supabase.from('konu_analizleri').insert(
+            kayitlar.map(k => ({ user_id: user.id, analiz_id: analizId, ders: k.ders, konu: k.konu, dogru: k.dogru, yanlis: k.yanlis, bos: k.bos }))
+        );
+        if (kayitHatasi) console.error('[Konu Analizi] konu_analizleri kaydedilemedi:', kayitHatasi.message);
+
+        const zayifEklemeleri = {};
+        const ogrenilmisKonular = {};
+        const tekrarEdenZayifKonular = {};
+        const sonuclar = kayitlar.map(k => {
+            const toplam = k.dogru + k.yanlis + k.bos;
+            const oran = k.dogru / toplam;
+            const zayif = k.yanlis > 0 || k.bos > 0;
+            const tekrar = zayif && oncedenZayifSet.has(k.ders + '||' + k.konu);
+
+            if (zayif) {
+                (zayifEklemeleri[k.ders] = zayifEklemeleri[k.ders] || []).push(k.konu);
+                if (tekrar) (tekrarEdenZayifKonular[k.ders] = tekrarEdenZayifKonular[k.ders] || []).push(k.konu);
+            } else {
+                (ogrenilmisKonular[k.ders] = ogrenilmisKonular[k.ders] || []).push(k.konu);
+            }
+
+            // Yapay zeka beklemeden ANINDA öneri - basit, kurala dayalı (bkz.
+            // generateHomeworkPlan'daki genel net başarı bandı mantığıyla tutarlı).
+            let onerilenSoru = 0;
+            let durum = 'iyi';
+            if (zayif) {
+                durum = tekrar ? 'tekrarlayan' : 'zayif';
+                if (oran < 0.4) onerilenSoru = tekrar ? 30 : 25;
+                else if (oran < 0.7) onerilenSoru = tekrar ? 20 : 15;
+                else onerilenSoru = tekrar ? 15 : 10;
+            }
+
+            return { ders: k.ders, konu: k.konu, dogru: k.dogru, yanlis: k.yanlis, bos: k.bos, durum, onerilenSoru };
+        });
+
+        // Profildeki zayif_konular'ı güncelle: yeni zayıflıkları ekle, artık
+        // tam doğru yapılan konuları listeden çıkar (öğrenmiş sayılır).
+        const mevcutZayif = { ...(user.zayif_konular || {}) };
+        Object.entries(zayifEklemeleri).forEach(([ders, konular]) => {
+            const mevcut = new Set(mevcutZayif[ders] || []);
+            konular.forEach(k => mevcut.add(k));
+            mevcutZayif[ders] = Array.from(mevcut);
+        });
+        Object.entries(ogrenilmisKonular).forEach(([ders, konular]) => {
+            if (!Array.isArray(mevcutZayif[ders])) return;
+            const cikarilacak = new Set(konular);
+            mevcutZayif[ders] = mevcutZayif[ders].filter(k => !cikarilacak.has(k));
+            if (mevcutZayif[ders].length === 0) delete mevcutZayif[ders];
+        });
+
+        await supabase.from('profiles').update({ zayif_konular: mevcutZayif }).eq('id', user.id);
+
+        res.json({ success: true, sonuclar });
+
+        // Haftalık program arka planda, öğrenciyi beklemeden güncellensin -
+        // sınıf henüz bilinmiyorsa (AI Koç'ta hiç tanışmadıysa) hiçbir şey
+        // tetiklenmez, "TYT varsay" gibi riskli bir tahmine güvenmiyoruz.
+        if (user.sinif) {
+            (async () => {
+                try {
+                    await odevPlaniUretVeUygula(user.id, {
+                        sinif: user.sinif, aytAlani: user.ayt_alani, hedef: user.hedef,
+                        tamamlananKonular: user.tamamlanan_konular || {}, zayifKonular: mevcutZayif,
+                        tekrarEdenZayifKonular
+                    }, { yeniHafta: false });
+                } catch (planError) {
+                    console.error('[Konu Analizi] Ödev planı güncellenemedi:', planError?.message || planError);
+                }
+            })();
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Sunucu hatası oluştu.' });
     }
 });
 

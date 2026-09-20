@@ -274,6 +274,58 @@ const SYLLABUS = {
     }
 };
 
+// Net girişindeki alan id'lerinden (NET_ALANLARI, örn. "fen") gerçek
+// müfredat ders adlarına (SYLLABUS, örn. "Fizik"/"Kimya"/"Biyoloji") eşleme -
+// konu bazlı (doğru/yanlış/boş) şablonun hangi konuları göstereceğini bulmak
+// için. Bazı alanlar (TYT'deki "fen"/"sosyal" gibi) birden fazla dersi
+// kapsıyor, o yüzden değer bir dizi.
+const NET_ALANI_DERS_ESLESMESI = {
+    TYT: {
+        mat: ['Matematik', 'Geometri'], turkce: ['Türkçe / Türk Dili ve Edebiyatı'],
+        fen: ['Fizik', 'Kimya', 'Biyoloji'], sosyal: ['Tarih', 'Coğrafya']
+    },
+    AYT_SAY: { mat: ['Matematik'], fizik: ['Fizik'], kimya: ['Kimya'], biyoloji: ['Biyoloji'] },
+    AYT_EA: {
+        mat: ['Matematik'], edebiyat: ['Türkçe / Türk Dili ve Edebiyatı'],
+        tarih1: ['Tarih'], cografya1: ['Coğrafya']
+    },
+    AYT_SOZ: {
+        edebiyat: ['Türkçe / Türk Dili ve Edebiyatı'], tarih1: ['Tarih'], cografya1: ['Coğrafya'],
+        tarih2: ['Tarih'], cografya2: ['Coğrafya'], felsefe: ['Felsefe Grubu'], din: ['Felsefe Grubu']
+    },
+    KPSS: {
+        k_turkce: ['Türkçe'], k_mat: ['Matematik'], k_tarih: ['Tarih'],
+        k_cografya: ['Coğrafya'], k_vat: ['Vatandaşlık'], k_guncel: ['Güncel Olaylar']
+    },
+    LGS: {
+        l_turkce: ['Türkçe / Türk Dili ve Edebiyatı'], l_mat: ['Matematik'], l_fen: ['Fen Bilimleri'],
+        l_inkilap: ['T.C. İnkılap Tarihi ve Atatürkçülük'], l_din: ['Din Kültürü ve Ahlak Bilgisi'], l_ingilizce: ['İngilizce']
+    }
+};
+
+// Yukarıdaki eşlemedeki ders adlarını hangi SYLLABUS bloğundan (TYT/AYT/
+// KPSS/LGS) okuyacağımız - AYT_SAY/AYT_EA/AYT_SOZ'ün hepsi SYLLABUS.AYT'yi kullanır.
+const NET_ALANI_KAYNAK_SYLLABUS = {
+    TYT: SYLLABUS.TYT, AYT_SAY: SYLLABUS.AYT, AYT_EA: SYLLABUS.AYT, AYT_SOZ: SYLLABUS.AYT,
+    KPSS: SYLLABUS.KPSS, LGS: SYLLABUS.LGS
+};
+
+/**
+ * Bir net girişi alanının (örn. "fen") konu bazlı (doğru/yanlış/boş) şablonda
+ * hangi ders(ler)in hangi konularının gösterileceğini döndürür.
+ * @param {string} sinavTuru - NET_ALANLARI'ndaki anahtar (örn. "TYT", "AYT_SAY", "KPSS").
+ * @param {string} alanId - NET_ALANLARI[sinavTuru] içindeki bir alanın id'si (örn. "fen").
+ * @returns {Array<{ders: string, konular: string[]}>}
+ */
+function getKonuBreakdownDersleri(sinavTuru, alanId) {
+    const dersAdlari = NET_ALANI_DERS_ESLESMESI[sinavTuru]?.[alanId];
+    const kaynak = NET_ALANI_KAYNAK_SYLLABUS[sinavTuru];
+    if (!Array.isArray(dersAdlari) || !kaynak) return [];
+    return dersAdlari
+        .filter(ders => Array.isArray(kaynak[ders]))
+        .map(ders => ({ ders, konular: kaynak[ders] }));
+}
+
 const GECERLI_SINIFLAR = ['8', '9', '10', '11', '12', 'Mezun', 'KPSS Adayı'];
 const GECERLI_AYT_ALANLARI = ['SAY', 'EA', 'SOZ'];
 
@@ -340,4 +392,7 @@ function getTumDersler() {
     return Array.from(hepsi).sort((a, b) => a.localeCompare(b, 'tr'));
 }
 
-module.exports = { EXAM_DATES, SYLLABUS, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getKaynakDersleri, getTumDersler };
+module.exports = {
+    EXAM_DATES, SYLLABUS, NET_ALANLARI, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI,
+    getMufredat, getKaynakDersleri, getTumDersler, getKonuBreakdownDersleri
+};
