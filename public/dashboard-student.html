@@ -110,7 +110,7 @@
                                     <% a.fieldValues.forEach(v => { %><td><%= v %></td><% }) %>
                                     <td class="text-info fw-bold"><%= a.toplam_net || 0 %></td>
                                     <td>
-                                        <form action="/delete-analysis" method="POST" class="m-0">
+                                        <form action="/delete-analysis" method="POST" class="m-0" onsubmit="return confirm('Bu analiz kaydını silmek istediğine emin misin? Bu işlem geri alınamaz.');">
                                             <input type="hidden" name="analizId" value="<%= a.id %>">
                                             <button class="btn btn-sm btn-outline-danger py-0"><i class="fas fa-trash small"></i></button>
                                         </form>
