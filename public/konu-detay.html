@@ -17,15 +17,32 @@
         .orbitron{ font-family:'Orbitron', sans-serif; }
         .panel{ max-width:820px; margin:24px auto 60px; background:rgba(30,41,59,.6); border:1px solid rgba(13,202,240,.25); border-radius:16px; padding:24px; box-sizing:border-box; }
         .panel-header-sticky{ position:sticky; top:0; z-index:20; background:#0f172a; margin:-24px -24px 20px; padding:16px 24px; border-radius:16px 16px 0 0; border-bottom:1px solid rgba(255,255,255,0.08); }
+
+        .ai-bubble{ display:flex; gap:12px; align-items:flex-start; margin-bottom:22px; }
+        .ai-avatar{ width:36px; height:36px; border-radius:50%; background:rgba(13,202,240,.12); border:1px solid rgba(13,202,240,.4); display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 0 14px rgba(13,202,240,.25); }
+        .ai-avatar i{ color:#0dcaf0; font-size:.95rem; }
+        .ai-bubble-text{ background:#0f172a; border:1px solid rgba(13,202,240,.3); border-bottom-left-radius:4px; border-radius:14px; padding:14px 16px; font-size:.88rem; line-height:1.55; color:#e2e8f0; }
+        .ai-bubble-text strong{ color:#0dcaf0; }
+
+        .legend{ display:flex; flex-wrap:wrap; gap:14px; font-size:.72rem; color:#94a3b8; margin-bottom:20px; padding:10px 14px; background:#0f172a; border:1px solid rgba(255,255,255,.06); border-radius:10px; }
+        .legend span{ display:inline-flex; align-items:center; gap:6px; }
+        .legend .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+
         .ders-card{ background:#0f172a; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:18px; margin-bottom:16px; }
-        .konu-row{ display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,.05); flex-wrap:wrap; }
-        .konu-row:last-child{ border-bottom:none; }
-        .konu-adi{ flex:1 1 220px; font-size:.85rem; color:#cbd5e1; }
-        .sayac-grubu{ display:flex; gap:8px; }
-        .sayac-grubu label{ font-size:9px; text-transform:uppercase; letter-spacing:.5px; color:#64748b; display:block; margin-bottom:2px; text-align:center; }
-        .sayac-input{ width:52px; background:#020617; border:1px solid #334155; color:white; border-radius:8px; padding:6px 4px; text-align:center; font-size:.85rem; }
-        .sayac-input:focus{ border-color:#0dcaf0; outline:none; }
-        .sayac-input.yanlis-input:focus{ border-color:#ffc107; }
+        .ders-card h6{ font-family:'Orbitron', sans-serif; letter-spacing:.5px; font-size:.82rem; }
+        .chip-grid{ display:flex; flex-wrap:wrap; gap:8px; }
+
+        .konu-chip{
+            appearance:none; border-radius:999px; padding:8px 16px; font-size:.78rem;
+            background:#020617; border:1px solid rgba(255,255,255,.14); color:#94a3b8;
+            cursor:pointer; transition:.18s ease; user-select:none; line-height:1.3;
+        }
+        .konu-chip:hover{ border-color:rgba(13,202,240,.5); color:#e2e8f0; transform:translateY(-1px); }
+        .konu-chip:active{ transform:translateY(0) scale(.97); }
+        .konu-chip[data-state="yanlis"]{ background:rgba(220,53,69,.16); border-color:#dc3545; color:#f87171; box-shadow:0 0 12px rgba(220,53,69,.3); }
+        .konu-chip[data-state="bos"]{ background:rgba(100,116,139,.22); border-color:#64748b; color:#cbd5e1; box-shadow:0 0 10px rgba(100,116,139,.2); }
+        .konu-chip[data-state="biliyorum"]{ background:rgba(25,135,84,.16); border-color:#198754; color:#4ade80; box-shadow:0 0 12px rgba(25,135,84,.3); }
+
         .sonuc-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; margin-bottom:8px; background:#0f172a; border:1px solid rgba(255,255,255,.08); }
         .sonuc-row.zayif{ border-color:rgba(255,193,7,.4); }
         .sonuc-row.tekrarlayan{ border-color:rgba(220,53,69,.5); }
@@ -33,6 +50,9 @@
         .badge-iyi{ background:rgba(25,135,84,.2); color:#75d99b; }
         .badge-zayif{ background:rgba(255,193,7,.2); color:#ffc107; }
         .badge-tekrarlayan{ background:rgba(220,53,69,.2); color:#f87171; }
+
+        #gonderBtn{ background:linear-gradient(90deg,#0dcaf0,#0891b2); border:none; box-shadow:0 0 20px rgba(13,202,240,.25); }
+        #gonderBtn:hover{ box-shadow:0 0 28px rgba(13,202,240,.4); }
     </style>
 </head>
 <body>
@@ -42,31 +62,40 @@
         <div class="panel-header-sticky d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h5 class="orbitron text-info m-0" style="letter-spacing:1px; font-size:1rem;"><i class="fas fa-list-check me-2"></i>Konu Bazlı Analiz</h5>
-                <p class="text-secondary small m-0 mt-1">Yanlış/boş çıkan derslerde hangi konudan kaç doğru/yanlış/boş yaptığını gir, sana hemen (yapay zeka beklemeden) konu konu ne kadar soru çözmen gerektiğini söyleyelim.</p>
             </div>
             <a href="/dashboard" class="text-secondary small text-decoration-none flex-shrink-0">Atla, sonra yaparım</a>
         </div>
 
         <div id="formAlani">
-            <p class="text-secondary small mb-3">Sadece hatırladığın/emin olduğun konuları doldur - boş bıraktığın satırlar hesaba katılmaz.</p>
+            <div class="ai-bubble">
+                <div class="ai-avatar"><i class="fas fa-brain"></i></div>
+                <div class="ai-bubble-text">
+                    Netlerini sisteme kaydettim! Seni gerçekten analiz edebilmem için son denemende
+                    <strong><%= dersGruplari.map(g => g.ders).join(', ') %></strong>
+                    derslerinde hangi konularda yanlış ya da boş bıraktığını bilmem lazım.
+                    Aşağıdan hatırladığın konulara dokun, emin olmadıklarını hiç dokunmadan bırakabilirsin.
+                </div>
+            </div>
+
+            <div class="legend">
+                <span><span class="dot" style="background:#64748b;"></span>Dokunulmadı = atla</span>
+                <span><span class="dot" style="background:#dc3545;"></span>1 dokun = Yanlış</span>
+                <span><span class="dot" style="background:#64748b;box-shadow:0 0 6px #64748b;"></span>2 dokun = Boş</span>
+                <span><span class="dot" style="background:#198754;"></span>3 dokun = Artık Biliyorum</span>
+            </div>
 
             <% dersGruplari.forEach((grup, gi) => { %>
             <div class="ders-card">
                 <h6 class="text-info mb-3"><%= grup.ders %></h6>
-                <% grup.konular.forEach((konu, ki) => { %>
-                <div class="konu-row">
-                    <span class="konu-adi"><%= konu %></span>
-                    <div class="sayac-grubu">
-                        <div><label>Doğru</label><input type="number" min="0" max="99" class="sayac-input dogru-input" data-ders="<%= grup.ders %>" data-konu="<%= konu %>" data-alan="dogru" placeholder="0"></div>
-                        <div><label>Yanlış</label><input type="number" min="0" max="99" class="sayac-input yanlis-input" data-ders="<%= grup.ders %>" data-konu="<%= konu %>" data-alan="yanlis" placeholder="0"></div>
-                        <div><label>Boş</label><input type="number" min="0" max="99" class="sayac-input" data-ders="<%= grup.ders %>" data-konu="<%= konu %>" data-alan="bos" placeholder="0"></div>
-                    </div>
+                <div class="chip-grid">
+                    <% grup.konular.forEach((konu, ki) => { %>
+                    <button type="button" class="konu-chip" data-ders="<%= grup.ders %>" data-konu="<%= konu %>" data-state="neutral" onclick="konuChipDegistir(this)"><%= konu %></button>
+                    <% }) %>
                 </div>
-                <% }) %>
             </div>
             <% }) %>
 
-            <button class="btn btn-info w-100 fw-bold py-2 text-dark" id="gonderBtn" onclick="analiziGonder()">
+            <button class="btn w-100 fw-bold py-2 text-dark mt-2" id="gonderBtn" onclick="analiziGonder()">
                 <span id="gonderSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>Analizi Tamamla
             </button>
         </div>
@@ -85,18 +114,33 @@
     <script>
         const ANALIZ_ID = <%- JSON.stringify(analiz.id) %>;
 
+        // Her konu kutucuğu tek dokunuşla 4 durum arasında döner - ayrı ayrı
+        // doğru/yanlış/boş kutucuğu doldurmak yerine (eski tasarım çok
+        // yorucuydu) tek bir dokunuşla durum değiştiriyor.
+        const DURUM_SIRASI = ['neutral', 'yanlis', 'bos', 'biliyorum'];
+        const DURUM_ETIKET = { neutral: '', yanlis: ' · Yanlış', bos: ' · Boş', biliyorum: ' · ✓ Biliyorum' };
+
+        function konuChipDegistir(el) {
+            const mevcut = el.dataset.state;
+            const sonraki = DURUM_SIRASI[(DURUM_SIRASI.indexOf(mevcut) + 1) % DURUM_SIRASI.length];
+            el.dataset.state = sonraki;
+            el.textContent = el.dataset.konu + DURUM_ETIKET[sonraki];
+        }
+
         async function analiziGonder() {
-            const kayitlarMap = {};
-            document.querySelectorAll('.sayac-input').forEach(inp => {
-                const key = inp.dataset.ders + '||' + inp.dataset.konu;
-                if (!kayitlarMap[key]) kayitlarMap[key] = { ders: inp.dataset.ders, konu: inp.dataset.konu, dogru: 0, yanlis: 0, bos: 0 };
-                const val = parseInt(inp.value, 10);
-                if (Number.isFinite(val) && val > 0) kayitlarMap[key][inp.dataset.alan] = val;
+            const kayitlar = [];
+            document.querySelectorAll('.konu-chip').forEach(chip => {
+                const durum = chip.dataset.state;
+                if (durum === 'neutral') return;
+                const satir = { ders: chip.dataset.ders, konu: chip.dataset.konu, dogru: 0, yanlis: 0, bos: 0 };
+                if (durum === 'yanlis') satir.yanlis = 1;
+                else if (durum === 'bos') satir.bos = 1;
+                else if (durum === 'biliyorum') satir.dogru = 1;
+                kayitlar.push(satir);
             });
-            const kayitlar = Object.values(kayitlarMap).filter(k => k.dogru + k.yanlis + k.bos > 0);
 
             if (kayitlar.length === 0) {
-                alert('En az bir konuya değer girmelisin, ya da "Atla" ile geçebilirsin.');
+                alert('En az bir konuya dokunmalısın, ya da "Atla" ile geçebilirsin.');
                 return;
             }
 
@@ -135,7 +179,7 @@
                 const badgeMetin = s.durum === 'tekrarlayan' ? 'Tekrarlayan Hata' : (s.durum === 'zayif' ? 'Zayıf' : 'Sağlam');
                 const oneriMetin = s.onerilenSoru > 0 ? (s.onerilenSoru + ' soru öner') : 'Tekrar gerekmez';
                 return '<div class="sonuc-row ' + s.durum + '">' +
-                    '<div><div class="fw-bold small">' + s.konu + '</div><div class="text-secondary" style="font-size:.75rem;">' + s.ders + ' · D:' + s.dogru + ' Y:' + s.yanlis + ' B:' + s.bos + '</div></div>' +
+                    '<div><div class="fw-bold small">' + s.konu + '</div><div class="text-secondary" style="font-size:.75rem;">' + s.ders + '</div></div>' +
                     '<div class="text-end"><span class="badge-durum badge-' + s.durum + '">' + badgeMetin + '</span><div class="text-secondary mt-1" style="font-size:.72rem;">' + oneriMetin + '</div></div>' +
                     '</div>';
             }).join('');
