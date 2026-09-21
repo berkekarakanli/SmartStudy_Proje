@@ -11,7 +11,7 @@ const crypto = require('crypto');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const ejs = require('ejs');
-const { readNetFromOpticImage, generateHomeworkPlan, generateChatReply } = require('./geminiService');
+const { readNetFromOpticImage, generateNetAnalysis, generateHomeworkPlan, generateChatReply } = require('./geminiService');
 const { EXAM_DATES, NET_ALANLARI, SYLLABUS, GECERLI_SINIFLAR, GECERLI_AYT_ALANLARI, getMufredat, getTumDersler, getKonuBreakdownDersleri } = require('./curriculum');
 const { odemeBaslat, odemeDogrula, iyzicoAktif } = require('./iyzicoService');
 const { odemeBaslat: paytrOdemeBaslat, bildirimDogrula: paytrBildirimDogrula, paytrAktif } = require('./paytrService');
@@ -2043,8 +2043,26 @@ app.post('/generate-plan', requireUser, async (req, res) => {
         }).select('id').single();
         if (analizError) throw analizError;
 
-        if (wantsJson(req)) return res.status(201).json({ success: true, id: newAnaliz.id, toplam_net: toplamNet });
-        res.redirect('/dashboard');
+        if (wantsJson(req)) res.status(201).json({ success: true, id: newAnaliz.id, toplam_net: toplamNet });
+        else res.redirect('/dashboard');
+
+        // AI Koç net girişinden hemen sonra otomatik bir yorum üretsin -
+        // kullanıcı konu bazlı detaylı analizi hiç doldurmasa ("Atla" dese)
+        // bile en azından toplam net üzerinden bir geri bildirim alsın. Free
+        // ve Premium'da aynı şekilde çalışır - detaylı (konu bazlı) analiz
+        // ayrı bir Premium özelliği, bu sadece genel bir yorum.
+        (async () => {
+            try {
+                const { data: hataKayitlari } = await supabase.from('wrong_questions').select('ai_solution').eq('user_id', user.id).order('tarih', { ascending: false }).limit(10);
+                const hataDefteriSorulari = (hataKayitlari || []).map(h => h.ai_solution).filter(Boolean);
+                const yorum = await generateNetAnalysis({ sinavTuru: sinav_turu, detaylar, toplamNet, hataDefteriSorulari });
+                if (yorum) {
+                    await supabase.from('ai_mesajlar').insert({ user_id: user.id, rol: 'ai', mesaj: yorum, okunmadi: true });
+                }
+            } catch (yorumError) {
+                console.error('[Net Analizi] Otomatik yorum üretilemedi:', yorumError?.message || yorumError);
+            }
+        })();
     } catch (error) {
         console.error(error);
         if (wantsJson(req)) return res.status(500).json({ success: false, message: 'Analiz kaydedilemedi.' });

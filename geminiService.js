@@ -94,7 +94,10 @@ async function generateWithRetry(params, retries = 2, varsayilanDelayMs = 3000) 
     } catch (error) {
         const mesaj = String(error?.message || error);
         const kod = error?.error?.code ?? error?.code;
-        const tekrarDenenebilir = kod === 429 || kod === 503 || /429|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand/i.test(mesaj);
+        // Google'ın "500 Internal error" hatası da (kod adı yanıltıcı olsa da)
+        // genelde geçici çıkıyor - bu oturumda birkaç kez karşılaşıp bir
+        // tekrar denemede düzeldiğini gördük, retries kalmışsa denemeye dahil.
+        const tekrarDenenebilir = kod === 429 || kod === 503 || kod === 500 || /429|RESOURCE_EXHAUSTED|UNAVAILABLE|high demand|internal error/i.test(mesaj);
         if (tekrarDenenebilir && retries > 0) {
             const gercekBekleme = retryDelayMsCikar(error);
             const bekleme = Math.min(gercekBekleme ?? varsayilanDelayMs, 15000) + 500; // küçük bir tampon pay
