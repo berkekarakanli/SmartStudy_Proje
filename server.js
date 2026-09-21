@@ -2069,6 +2069,22 @@ app.get('/net-analiz/:analizId/konu-detay', requireLogin, async (req, res) => {
         if (!analiz) return res.status(404).send(errorPage('Bulunamadı', 'Bu analiz kaydı bulunamadı.', '/dashboard'));
 
         const alanlar = NET_ALANLARI[analiz.sinav_turu] || [];
+
+        // Konu bazlı (doğru/yanlış/boş) detaylı analiz PREMIUM özelliği - Free
+        // kullanıcı hiçbir şey girmeden, sadece net yüzdesine bakan basit bir
+        // otomatik özet görüyor. İkisi de aynı sayfada, kart açılıp
+        // kapanmasıyla ilgisi yok - Free'de konu listesi hiç gösterilmiyor.
+        const isPremium = user.level === 'Premium';
+        if (!isPremium) {
+            const alanOzet = alanlar
+                .map(alan => {
+                    const net = Number(analiz.detaylar?.[alan.id] ?? 0);
+                    const yuzde = alan.max > 0 ? Math.round((net / alan.max) * 100) : 0;
+                    return { label: alan.label, yuzde };
+                })
+                .sort((a, b) => a.yuzde - b.yuzde);
+            return res.render('konu-detay', { user, analiz, dersGruplari: [], isPremium: false, alanOzet });
+        }
         // Sınavdaki TÜM dersler gösteriliyor (mükemmel net alınanlar dahil) -
         // sadece eksik olanları göstermek kafa karıştırıyordu ("Fizik/Tarih
         // niye yok" diye sorulmasına yol açtı). Bunun yerine her ders
@@ -2088,7 +2104,7 @@ app.get('/net-analiz/:analizId/konu-detay', requireLogin, async (req, res) => {
 
         if (dersGruplari.length === 0) return res.redirect('/dashboard');
 
-        res.render('konu-detay', { user, analiz, dersGruplari });
+        res.render('konu-detay', { user, analiz, dersGruplari, isPremium: true, alanOzet: null });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Konu detayı yüklenirken sorun oluştu.', '/dashboard'));
