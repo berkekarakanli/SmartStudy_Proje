@@ -90,7 +90,12 @@ create table public.profiles (
     -- Admin panelinde "kim en son ne zaman giriş/çıkış yaptı" görebilmek için
     -- - /login ve /logout rotalarında güncelleniyor.
     son_giris_tarihi timestamptz,
-    son_cikis_tarihi timestamptz
+    son_cikis_tarihi timestamptz,
+
+    -- Rozet duvarı bir rozeti ne zaman kazandığını gösterebilsin ve yeni
+    -- kazanılan bir rozet için bir kerelik bildirim (toast) gösterebilelim
+    -- diye - { rozetId: kazanilmaTarihiISO }. /profile'da güncelleniyor.
+    kazanilan_rozetler jsonb default '{}'::jsonb
 );
 
 create index idx_profiles_referral_code on public.profiles(referral_code);

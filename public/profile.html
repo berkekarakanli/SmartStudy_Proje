@@ -56,9 +56,11 @@
             font-size:1.2rem; background:rgba(255,255,255,.05); color:#475569;
         }
         .badge-item .badge-name { font-size:10px; font-weight:700; color:#64748b; line-height:1.2; }
+        .badge-item .badge-date { font-size:8.5px; color:#475569; }
         .badge-item.earned { border-color:rgba(13,202,240,.35); background:rgba(13,202,240,.08); }
         .badge-item.earned .badge-icon { background:linear-gradient(135deg,#0dcaf0,#ffc107); color:#020617; box-shadow:0 0 14px rgba(13,202,240,.5); }
         .badge-item.earned .badge-name { color:#e2e8f0; }
+        .badge-item.earned .badge-date { color:#0dcaf0; }
         .badge-item.earned:hover { transform:translateY(-3px); }
 
         .settings-link-row { display:flex; align-items:center; gap:14px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:16px; margin-top:24px; }
@@ -140,9 +142,11 @@
         </h6>
         <div class="badge-wall mb-4">
             <% badges.forEach(b => { %>
-            <div class="badge-item <%= b.earned ? 'earned' : '' %>" title="<%= b.desc %>">
+            <% const kazanmaTarihiMetni = b.kazanilmaTarihi ? new Date(b.kazanilmaTarihi).toLocaleDateString('tr-TR') : null; %>
+            <div class="badge-item <%= b.earned ? 'earned' : '' %>" title="<%= b.desc %><%= kazanmaTarihiMetni ? ' - ' + kazanmaTarihiMetni + ' tarihinde kazanıldı' : '' %>">
                 <span class="badge-icon"><i class="fas <%= b.icon %>"></i></span>
                 <span class="badge-name"><%= b.name %></span>
+                <% if (kazanmaTarihiMetni) { %><span class="badge-date"><%= kazanmaTarihiMetni %></span><% } %>
             </div>
             <% }) %>
         </div>
@@ -171,6 +175,14 @@
                 document.execCommand('copy');
             });
         }
+
+        // Yeni kazanılan rozetler için bir kerelik bildirim - sunucu bunları
+        // profildeki kazanılan_rozetler kaydına yazdığı için bir daha
+        // gösterilmez, sadece kazanıldığı ilk /profile ziyaretinde çıkar.
+        const yeniRozetler = <%- JSON.stringify(yeniRozetler || []) %>;
+        yeniRozetler.forEach((ad, i) => {
+            setTimeout(() => showToast('🏅 Yeni rozet kazandın: ' + ad, 'success'), i * 700);
+        });
     </script>
 </body>
 </html>

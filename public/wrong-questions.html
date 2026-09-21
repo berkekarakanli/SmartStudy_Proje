@@ -179,6 +179,7 @@
         document.querySelectorAll('[data-delete-form]').forEach(form => {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                if (!confirm('Bu soruyu hata defterinden silmek istediğine emin misin? Bu işlem geri alınamaz.')) return;
                 const questionId = form.querySelector('input[name=questionId]').value;
                 try {
                     const res = await fetch('/api/delete-wrong-question', {

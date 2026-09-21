@@ -1165,31 +1165,31 @@ function computeBadges({ analizler, wrongCount, pomodoroDakika, referralCount, k
     const hepsiVar = ['TYT', 'AYT', 'KPSS', 'LGS'].every(t => sinavTurleri.has(t));
 
     return [
-        { icon: 'fa-shoe-prints', name: 'İlk Adım', desc: 'İlk net analizini kaydettin', earned: analizCount >= 1 },
-        { icon: 'fa-chart-line', name: 'Analist', desc: '5 net analizi kaydettin', earned: analizCount >= 5 },
-        { icon: 'fa-chart-column', name: 'Uzman Analist', desc: '15 net analizi kaydettin', earned: analizCount >= 15 },
-        { icon: 'fa-medal', name: 'Sınav Ustası', desc: '30 net analizi kaydettin', earned: analizCount >= 30 },
-        { icon: 'fa-graduation-cap', name: 'TYT Kaşifi', desc: 'En az bir TYT analizi yaptın', earned: sinavTurleri.has('TYT') },
-        { icon: 'fa-flask', name: 'AYT Kaşifi', desc: 'En az bir AYT analizi yaptın', earned: sinavTurleri.has('AYT') },
-        { icon: 'fa-landmark', name: 'KPSS Kaşifi', desc: 'En az bir KPSS analizi yaptın', earned: sinavTurleri.has('KPSS') },
-        { icon: 'fa-school', name: 'LGS Kaşifi', desc: 'En az bir LGS analizi yaptın', earned: sinavTurleri.has('LGS') },
-        { icon: 'fa-star', name: 'Tam Kadro', desc: 'TYT, AYT, KPSS ve LGS\'nin hepsinden analiz yaptın', earned: hepsiVar },
-        { icon: 'fa-bolt', name: 'Yüksek Skor', desc: 'Bir analizde 100+ net attın', earned: maxNet >= 100 },
-        { icon: 'fa-crown', name: 'Mükemmeliyetçi', desc: 'Bir analizde 110+ net attın', earned: maxNet >= 110 },
-        { icon: 'fa-magnifying-glass', name: 'Hatasını Gören', desc: 'İlk yanlış soruyu hata defterine kaydettin', earned: wrongCount >= 1 },
-        { icon: 'fa-book-open', name: 'Titiz Öğrenci', desc: '10 yanlış soru kaydettin', earned: wrongCount >= 10 },
-        { icon: 'fa-magnet', name: 'Hata Avcısı', desc: '25 yanlış soru kaydettin', earned: wrongCount >= 25 },
-        { icon: 'fa-clock', name: 'Odaklanma Başlangıcı', desc: 'İlk pomodoro seansını tamamladın', earned: pomodoroDakika >= 25 },
-        { icon: 'fa-stopwatch', name: 'Odak Ustası', desc: 'Toplam 5 saat odaklandın', earned: pomodoroDakika >= 300 },
-        { icon: 'fa-fire', name: 'Demir İrade', desc: 'Toplam 20 saat odaklandın', earned: pomodoroDakika >= 1200 },
-        { icon: 'fa-person-running', name: 'Maraton Koşucusu', desc: 'Toplam 50 saat odaklandın', earned: pomodoroDakika >= 3000 },
-        { icon: 'fa-user-tie', name: 'Koça Bağlandın', desc: 'Bir eğitim koçuna bağlandın', earned: kocSayisi >= 1 },
-        { icon: 'fa-paper-plane', name: 'Davetçi', desc: 'İlk arkadaşını davet ettin', earned: referralCount >= 1 },
-        { icon: 'fa-people-group', name: 'Topluluk Elçisi', desc: '5 arkadaş davet ettin', earned: referralCount >= 5 },
-        { icon: 'fa-certificate', name: 'Premium Üye', desc: "Premium'a yükseldin", earned: isPremium },
-        { icon: 'fa-hand-sparkles', name: 'Hoş Geldin', desc: 'SmartStudy ailesine katıldın', earned: true },
-        { icon: 'fa-layer-group', name: 'Çok Yönlü', desc: 'Net analizi, hata defteri ve pomodoro\'nun hepsini kullandın', earned: analizCount >= 1 && wrongCount >= 1 && pomodoroDakika >= 1 },
-        { icon: 'fa-infinity', name: 'Azimli', desc: '15 saat odaklan + 15 analiz + 15 yanlış soru kaydı', earned: pomodoroDakika >= 900 && analizCount >= 15 && wrongCount >= 15 }
+        { id: 'ilk-adim', icon: 'fa-shoe-prints', name: 'İlk Adım', desc: 'İlk net analizini kaydettin', earned: analizCount >= 1 },
+        { id: 'analist', icon: 'fa-chart-line', name: 'Analist', desc: '5 net analizi kaydettin', earned: analizCount >= 5 },
+        { id: 'uzman-analist', icon: 'fa-chart-column', name: 'Uzman Analist', desc: '15 net analizi kaydettin', earned: analizCount >= 15 },
+        { id: 'sinav-ustasi', icon: 'fa-medal', name: 'Sınav Ustası', desc: '30 net analizi kaydettin', earned: analizCount >= 30 },
+        { id: 'tyt-kasifi', icon: 'fa-graduation-cap', name: 'TYT Kaşifi', desc: 'En az bir TYT analizi yaptın', earned: sinavTurleri.has('TYT') },
+        { id: 'ayt-kasifi', icon: 'fa-flask', name: 'AYT Kaşifi', desc: 'En az bir AYT analizi yaptın', earned: sinavTurleri.has('AYT') },
+        { id: 'kpss-kasifi', icon: 'fa-landmark', name: 'KPSS Kaşifi', desc: 'En az bir KPSS analizi yaptın', earned: sinavTurleri.has('KPSS') },
+        { id: 'lgs-kasifi', icon: 'fa-school', name: 'LGS Kaşifi', desc: 'En az bir LGS analizi yaptın', earned: sinavTurleri.has('LGS') },
+        { id: 'tam-kadro', icon: 'fa-star', name: 'Tam Kadro', desc: 'TYT, AYT, KPSS ve LGS\'nin hepsinden analiz yaptın', earned: hepsiVar },
+        { id: 'yuksek-skor', icon: 'fa-bolt', name: 'Yüksek Skor', desc: 'Bir analizde 100+ net attın', earned: maxNet >= 100 },
+        { id: 'mukemmeliyetci', icon: 'fa-crown', name: 'Mükemmeliyetçi', desc: 'Bir analizde 110+ net attın', earned: maxNet >= 110 },
+        { id: 'hatasini-goren', icon: 'fa-magnifying-glass', name: 'Hatasını Gören', desc: 'İlk yanlış soruyu hata defterine kaydettin', earned: wrongCount >= 1 },
+        { id: 'titiz-ogrenci', icon: 'fa-book-open', name: 'Titiz Öğrenci', desc: '10 yanlış soru kaydettin', earned: wrongCount >= 10 },
+        { id: 'hata-avcisi', icon: 'fa-magnet', name: 'Hata Avcısı', desc: '25 yanlış soru kaydettin', earned: wrongCount >= 25 },
+        { id: 'odaklanma-baslangici', icon: 'fa-clock', name: 'Odaklanma Başlangıcı', desc: 'İlk pomodoro seansını tamamladın', earned: pomodoroDakika >= 25 },
+        { id: 'odak-ustasi', icon: 'fa-stopwatch', name: 'Odak Ustası', desc: 'Toplam 5 saat odaklandın', earned: pomodoroDakika >= 300 },
+        { id: 'demir-irade', icon: 'fa-fire', name: 'Demir İrade', desc: 'Toplam 20 saat odaklandın', earned: pomodoroDakika >= 1200 },
+        { id: 'maraton-kosucusu', icon: 'fa-person-running', name: 'Maraton Koşucusu', desc: 'Toplam 50 saat odaklandın', earned: pomodoroDakika >= 3000 },
+        { id: 'koca-baglandin', icon: 'fa-user-tie', name: 'Koça Bağlandın', desc: 'Bir eğitim koçuna bağlandın', earned: kocSayisi >= 1 },
+        { id: 'davetci', icon: 'fa-paper-plane', name: 'Davetçi', desc: 'İlk arkadaşını davet ettin', earned: referralCount >= 1 },
+        { id: 'topluluk-elcisi', icon: 'fa-people-group', name: 'Topluluk Elçisi', desc: '5 arkadaş davet ettin', earned: referralCount >= 5 },
+        { id: 'premium-uye', icon: 'fa-certificate', name: 'Premium Üye', desc: "Premium'a yükseldin", earned: isPremium },
+        { id: 'hos-geldin', icon: 'fa-hand-sparkles', name: 'Hoş Geldin', desc: 'SmartStudy ailesine katıldın', earned: true },
+        { id: 'cok-yonlu', icon: 'fa-layer-group', name: 'Çok Yönlü', desc: 'Net analizi, hata defteri ve pomodoro\'nun hepsini kullandın', earned: analizCount >= 1 && wrongCount >= 1 && pomodoroDakika >= 1 },
+        { id: 'azimli', icon: 'fa-infinity', name: 'Azimli', desc: '15 saat odaklan + 15 analiz + 15 yanlış soru kaydı', earned: pomodoroDakika >= 900 && analizCount >= 15 && wrongCount >= 15 }
     ];
 }
 
@@ -1224,6 +1224,24 @@ app.get('/profile', requireLogin, async (req, res) => {
         isPremium: user.level === 'Premium'
     });
 
+    // Rozet kazanma anını (ve bir kerelik bildirimi) yakalamak için - hangi
+    // rozetlerin daha önce kazanıldığı profildeki kayıttan biliniyor, şimdi
+    // earned=true ama daha önce kaydedilmemiş olanlar YENİ kazanılmış demektir.
+    const kazanilanRozetler = { ...(user.kazanilan_rozetler || {}) };
+    const yeniRozetler = [];
+    let rozetGuncellemesiVarMi = false;
+    badges.forEach(b => {
+        if (b.earned && !kazanilanRozetler[b.id]) {
+            kazanilanRozetler[b.id] = new Date().toISOString();
+            yeniRozetler.push(b.name);
+            rozetGuncellemesiVarMi = true;
+        }
+        b.kazanilmaTarihi = b.earned ? kazanilanRozetler[b.id] : null;
+    });
+    if (rozetGuncellemesiVarMi) {
+        await supabase.from('profiles').update({ kazanilan_rozetler: kazanilanRozetler }).eq('id', user.id);
+    }
+
     res.render('profile', {
         user,
         analizCount: (analizler || []).length,
@@ -1233,7 +1251,8 @@ app.get('/profile', requireLogin, async (req, res) => {
         referralCode,
         referralCount,
         referralRemaining,
-        badges
+        badges,
+        yeniRozetler
     });
 });
 
