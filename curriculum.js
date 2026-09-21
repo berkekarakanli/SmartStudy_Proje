@@ -129,6 +129,20 @@ const SYLLABUS = {
             'Hücre Bölünmeleri: Mitoz', 'Hücre Bölünmeleri: Mayoz', 'Üreme Çeşitleri',
             'Kalıtımın Genel İlkeleri', 'Soyağacı ve Akraba Evliliği', 'Ekosistem Ekolojisi',
             'Güncel Çevre Sorunları'
+        ],
+        // TYT Sosyal Bilimler testi Tarih+Coğrafya'nın yanında Felsefe ve Din
+        // Kültürü'nden de 5'er soru içeriyor (toplam 20) - eskiden burada hiç
+        // yoktu, sadece Tarih/Coğrafya vardı.
+        'Felsefe': [
+            'Felsefenin Konusu ve Alanı', 'Felsefi Düşüncenin Doğuşu', 'Bilgi Felsefesi: Temel Kavramlar',
+            'Varlık Felsefesi: Temel Kavramlar', 'Ahlak Felsefesi: Temel Kavramlar', 'Sanat Felsefesi: Temel Kavramlar',
+            'Din Felsefesi: Temel Kavramlar', 'Siyaset Felsefesi: Temel Kavramlar', 'Bilim Felsefesi: Temel Kavramlar',
+            'İlk Çağ Felsefesi', 'İslam Felsefesi\'ne Giriş'
+        ],
+        'Din Kültürü ve Ahlak Bilgisi': [
+            'İnanç ile İlgili Meseleler', 'İbadet ile İlgili Meseleler', 'Ahlaki Tutum ve Davranışlar',
+            'Din ve Hayat İlişkisi', 'Hz. Muhammed\'in Hayatı ve Örnekliği', 'Kur\'an-ı Kerim\'e Göre Temel Değerler',
+            'İslam Düşüncesinde Yorumlar', 'Güncel Dini Meseleler'
         ]
     },
     AYT: {
@@ -199,6 +213,13 @@ const SYLLABUS = {
             'Öğrenme, Bellek ve Düşünme', 'Ruh Sağlığının Temelleri', 'Sosyolojiye Giriş',
             'Birey ve Toplum', 'Toplumsal Yapı', 'Toplumsal Değişme ve Gelişme', 'Toplum ve Kültür',
             'Toplumsal Kurumlar', 'Klasik Mantık', 'Mantık ve Dil', 'Sembolik Mantık'
+        ],
+        // AYT Sözel'in "din" alanı (6 soru) eskiden Felsefe Grubu'nun konu
+        // listesini ödünç alıyordu - ayrı, gerçek bir Din Kültürü listesi yoktu.
+        'Din Kültürü ve Ahlak Bilgisi': [
+            'İnanç Esasları', 'İbadet Esasları', 'Kader ve Kaza İnancı', 'Ahlaki Tutum ve Davranışlar',
+            'Hint ve Çin Dinleri', 'Yahudilik ve Hristiyanlık', 'İslam Düşüncesinde Yorumlar (İtikadi Mezhepler)',
+            'İslam ve Türk Kültüründe Tasavvufi Yorumlar', 'Güncel Dini Meseleler ve Sosyal Hayat'
         ]
     },
     KPSS: {
@@ -282,7 +303,7 @@ const SYLLABUS = {
 const NET_ALANI_DERS_ESLESMESI = {
     TYT: {
         mat: ['Matematik', 'Geometri'], turkce: ['Türkçe / Türk Dili ve Edebiyatı'],
-        fen: ['Fizik', 'Kimya', 'Biyoloji'], sosyal: ['Tarih', 'Coğrafya']
+        fen: ['Fizik', 'Kimya', 'Biyoloji'], sosyal: ['Tarih', 'Coğrafya', 'Felsefe', 'Din Kültürü ve Ahlak Bilgisi']
     },
     AYT_SAY: { mat: ['Matematik'], fizik: ['Fizik'], kimya: ['Kimya'], biyoloji: ['Biyoloji'] },
     AYT_EA: {
@@ -291,7 +312,7 @@ const NET_ALANI_DERS_ESLESMESI = {
     },
     AYT_SOZ: {
         edebiyat: ['Türkçe / Türk Dili ve Edebiyatı'], tarih1: ['Tarih'], cografya1: ['Coğrafya'],
-        tarih2: ['Tarih'], cografya2: ['Coğrafya'], felsefe: ['Felsefe Grubu'], din: ['Felsefe Grubu']
+        tarih2: ['Tarih'], cografya2: ['Coğrafya'], felsefe: ['Felsefe Grubu'], din: ['Din Kültürü ve Ahlak Bilgisi']
     },
     KPSS: {
         k_turkce: ['Türkçe'], k_mat: ['Matematik'], k_tarih: ['Tarih'],
@@ -364,7 +385,8 @@ function getMufredat(sinif, aytAlani) {
             Object.assign(aytDersler, {
                 'Türkçe / Türk Dili ve Edebiyatı': [...SYLLABUS.TYT['Türkçe / Türk Dili ve Edebiyatı'], ...SYLLABUS.AYT['Türkçe / Türk Dili ve Edebiyatı']],
                 Tarih: SYLLABUS.AYT.Tarih, Coğrafya: SYLLABUS.AYT.Coğrafya,
-                'Felsefe Grubu': SYLLABUS.AYT['Felsefe Grubu']
+                'Felsefe Grubu': SYLLABUS.AYT['Felsefe Grubu'],
+                'Din Kültürü ve Ahlak Bilgisi': SYLLABUS.AYT['Din Kültürü ve Ahlak Bilgisi']
             });
         }
         return { sinavTuru: 'TYT+AYT', dersler: aytDersler };

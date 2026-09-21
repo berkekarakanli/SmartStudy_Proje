@@ -24,24 +24,48 @@
         .ai-bubble-text{ background:#0f172a; border:1px solid rgba(13,202,240,.3); border-bottom-left-radius:4px; border-radius:14px; padding:14px 16px; font-size:.88rem; line-height:1.55; color:#e2e8f0; }
         .ai-bubble-text strong{ color:#0dcaf0; }
 
-        .legend{ display:flex; flex-wrap:wrap; gap:14px; font-size:.72rem; color:#94a3b8; margin-bottom:20px; padding:10px 14px; background:#0f172a; border:1px solid rgba(255,255,255,.06); border-radius:10px; }
-        .legend span{ display:inline-flex; align-items:center; gap:6px; }
-        .legend .dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
+        .hint{ font-size:.72rem; color:#94a3b8; margin-bottom:18px; padding:10px 14px; background:#0f172a; border:1px solid rgba(255,255,255,.06); border-radius:10px; }
 
-        .ders-card{ background:#0f172a; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:18px; margin-bottom:16px; }
-        .ders-card h6{ font-family:'Orbitron', sans-serif; letter-spacing:.5px; font-size:.82rem; }
-        .chip-grid{ display:flex; flex-wrap:wrap; gap:8px; }
+        .ders-card{ background:#0f172a; border:1px solid rgba(255,255,255,.08); border-radius:14px; margin-bottom:12px; overflow:hidden; }
+        .ders-toggle{ width:100%; display:flex; justify-content:space-between; align-items:center; background:transparent; border:none; color:white; padding:16px 18px; cursor:pointer; text-align:left; }
+        .ders-toggle .ders-adi{ font-family:'Orbitron', sans-serif; letter-spacing:.5px; font-size:.82rem; color:#0dcaf0; }
+        .ders-toggle .konu-sayisi{ font-size:.72rem; color:#64748b; margin-left:8px; }
+        .ders-toggle .durum-ozet{ font-size:.72rem; color:#ffc107; margin-left:auto; margin-right:10px; }
+        .ders-toggle i{ color:#64748b; transition:.2s; }
+        .ders-toggle[aria-expanded="true"] i{ transform:rotate(180deg); }
+        .ders-body{ padding:0 18px 16px; }
 
-        .konu-chip{
-            appearance:none; border-radius:999px; padding:8px 16px; font-size:.78rem;
-            background:#020617; border:1px solid rgba(255,255,255,.14); color:#94a3b8;
-            cursor:pointer; transition:.18s ease; user-select:none; line-height:1.3;
+        .kolon-basligi{ display:flex; justify-content:space-between; color:#64748b; font-size:.62rem; text-transform:uppercase; letter-spacing:.5px; padding:0 0 8px; }
+        .kolon-basligi .steppers{ display:flex; gap:6px; }
+        .kolon-basligi .steppers span{ width:78px; text-align:center; }
+
+        .konu-row{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:6px 0; border-top:1px solid rgba(255,255,255,.04); }
+        .konu-row:first-child{ border-top:none; }
+        .konu-adi{ flex:1 1 auto; font-size:.8rem; color:#cbd5e1; }
+        .steppers{ display:flex; gap:6px; flex-shrink:0; }
+        .stepper{ display:flex; }
+        .btn-row{ display:flex; align-items:center; background:#020617; border:1px solid #334155; border-radius:8px; width:78px; justify-content:space-between; }
+        .btn-row button{ width:22px; height:26px; background:transparent; border:none; color:#64748b; font-size:.75rem; cursor:pointer; }
+        .btn-row button:hover{ color:#0dcaf0; }
+        .btn-row .val{ width:22px; text-align:center; font-size:.8rem; color:#64748b; font-weight:700; }
+        .stepper.dogru .val.dolu{ color:#4ade80; }
+        .stepper.yanlis .val.dolu{ color:#f87171; }
+        .stepper.bos .val.dolu{ color:#ffc107; }
+
+        /* Dar ekranda (telefon) konu adı + 3 sayaç yan yana sığmıyor - konuyu
+           üste alıp sayaçları altına, eşit genişlikte üç sütun olarak diziyoruz. */
+        @media (max-width: 480px) {
+            .kolon-basligi{ display:none; }
+            .konu-row{ flex-direction:column; align-items:stretch; gap:6px; padding:10px 0; }
+            .konu-adi{ font-size:.82rem; }
+            .steppers{ width:100%; justify-content:space-between; }
+            .stepper{ flex:1; max-width:31%; flex-direction:column; align-items:center; gap:2px; }
+            .stepper::before{ font-size:.58rem; text-transform:uppercase; color:#64748b; }
+            .stepper.dogru::before{ content:'Doğru'; }
+            .stepper.yanlis::before{ content:'Yanlış'; }
+            .stepper.bos::before{ content:'Boş'; }
+            .btn-row{ width:100%; }
         }
-        .konu-chip:hover{ border-color:rgba(13,202,240,.5); color:#e2e8f0; transform:translateY(-1px); }
-        .konu-chip:active{ transform:translateY(0) scale(.97); }
-        .konu-chip[data-state="yanlis"]{ background:rgba(220,53,69,.16); border-color:#dc3545; color:#f87171; box-shadow:0 0 12px rgba(220,53,69,.3); }
-        .konu-chip[data-state="bos"]{ background:rgba(100,116,139,.22); border-color:#64748b; color:#cbd5e1; box-shadow:0 0 10px rgba(100,116,139,.2); }
-        .konu-chip[data-state="biliyorum"]{ background:rgba(25,135,84,.16); border-color:#198754; color:#4ade80; box-shadow:0 0 12px rgba(25,135,84,.3); }
 
         .sonuc-row{ display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; margin-bottom:8px; background:#0f172a; border:1px solid rgba(255,255,255,.08); }
         .sonuc-row.zayif{ border-color:rgba(255,193,7,.4); }
@@ -71,26 +95,40 @@
                 <div class="ai-avatar"><i class="fas fa-brain"></i></div>
                 <div class="ai-bubble-text">
                     Netlerini sisteme kaydettim! Seni gerçekten analiz edebilmem için son denemende
-                    <strong><%= dersGruplari.map(g => g.ders).join(', ') %></strong>
-                    derslerinde hangi konularda yanlış ya da boş bıraktığını bilmem lazım.
-                    Aşağıdan hatırladığın konulara dokun, emin olmadıklarını hiç dokunmadan bırakabilirsin.
+                    <strong><%= dersGruplari.filter(g => g.eksik).map(g => g.ders).join(', ') %></strong>
+                    derslerinde hangi konudan kaç doğru/yanlış/boş yaptığını bilmem lazım - sadece "yanlış yaptım" demek
+                    yetmiyor, 5 sorudan 4'ünü doğru yaptığın bir konuyla hiç dokunmadığın bir konu aynı öncelikte olmamalı.
+                    Yanlış/boş çıkan dersler aşağıda otomatik açık geldi, sadece hatırladığın konulara +/- ile değer gir,
+                    gerisini boş bırak. Tam net aldığın dersleri de istersen açıp kontrol edebilirsin.
                 </div>
             </div>
 
-            <div class="legend">
-                <span><span class="dot" style="background:#64748b;"></span>Dokunulmadı = atla</span>
-                <span><span class="dot" style="background:#dc3545;"></span>1 dokun = Yanlış</span>
-                <span><span class="dot" style="background:#64748b;box-shadow:0 0 6px #64748b;"></span>2 dokun = Boş</span>
-                <span><span class="dot" style="background:#198754;"></span>3 dokun = Artık Biliyorum</span>
-            </div>
+            <div class="hint"><i class="fas fa-hand-pointer me-1"></i>Bir ders başlığına dokunarak konularını aç/kapat.</div>
 
             <% dersGruplari.forEach((grup, gi) => { %>
             <div class="ders-card">
-                <h6 class="text-info mb-3"><%= grup.ders %></h6>
-                <div class="chip-grid">
-                    <% grup.konular.forEach((konu, ki) => { %>
-                    <button type="button" class="konu-chip" data-ders="<%= grup.ders %>" data-konu="<%= konu %>" data-state="neutral" onclick="konuChipDegistir(this)"><%= konu %></button>
-                    <% }) %>
+                <button type="button" class="ders-toggle" aria-expanded="<%= grup.eksik ? 'true' : 'false' %>" data-bs-toggle="collapse" data-bs-target="#ders-<%= gi %>">
+                    <span><span class="ders-adi"><%= grup.ders %></span><span class="konu-sayisi">(<%= grup.konular.length %> konu)</span></span>
+                    <% if (!grup.eksik) { %><span class="durum-ozet" style="color:#4ade80;">✓ Tam net</span><% } %>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="collapse<%= grup.eksik ? ' show' : '' %>" id="ders-<%= gi %>">
+                    <div class="ders-body">
+                        <div class="kolon-basligi">
+                            <span>Konu</span>
+                            <span class="steppers"><span>Doğru</span><span>Yanlış</span><span>Boş</span></span>
+                        </div>
+                        <% grup.konular.forEach((konu, ki) => { %>
+                        <div class="konu-row" data-ders="<%= grup.ders %>" data-konu="<%= konu %>">
+                            <span class="konu-adi"><%= konu %></span>
+                            <div class="steppers">
+                                <div class="stepper dogru"><div class="btn-row"><button type="button" onclick="adimAt(this,-1)">−</button><span class="val" data-alan="dogru">0</span><button type="button" onclick="adimAt(this,1)">+</button></div></div>
+                                <div class="stepper yanlis"><div class="btn-row"><button type="button" onclick="adimAt(this,-1)">−</button><span class="val" data-alan="yanlis">0</span><button type="button" onclick="adimAt(this,1)">+</button></div></div>
+                                <div class="stepper bos"><div class="btn-row"><button type="button" onclick="adimAt(this,-1)">−</button><span class="val" data-alan="bos">0</span><button type="button" onclick="adimAt(this,1)">+</button></div></div>
+                            </div>
+                        </div>
+                        <% }) %>
+                    </div>
                 </div>
             </div>
             <% }) %>
@@ -114,33 +152,39 @@
     <script>
         const ANALIZ_ID = <%- JSON.stringify(analiz.id) %>;
 
-        // Her konu kutucuğu tek dokunuşla 4 durum arasında döner - ayrı ayrı
-        // doğru/yanlış/boş kutucuğu doldurmak yerine (eski tasarım çok
-        // yorucuydu) tek bir dokunuşla durum değiştiriyor.
-        const DURUM_SIRASI = ['neutral', 'yanlis', 'bos', 'biliyorum'];
-        const DURUM_ETIKET = { neutral: '', yanlis: ' · Yanlış', bos: ' · Boş', biliyorum: ' · ✓ Biliyorum' };
-
-        function konuChipDegistir(el) {
-            const mevcut = el.dataset.state;
-            const sonraki = DURUM_SIRASI[(DURUM_SIRASI.indexOf(mevcut) + 1) % DURUM_SIRASI.length];
-            el.dataset.state = sonraki;
-            el.textContent = el.dataset.konu + DURUM_ETIKET[sonraki];
+        // Her sayaç +/- ile değişiyor (klavye gerekmiyor) ama gerçek
+        // doğru/yanlış/boş sayısını koruyoruz - sadece "yanlış yaptım"
+        // etiketi konunun ne kadar zayıf olduğunu ayırt edemiyordu.
+        function adimAt(btn, delta) {
+            const valEl = btn.parentElement.querySelector('.val');
+            let v = parseInt(valEl.dataset.value || valEl.textContent, 10) || 0;
+            v = Math.max(0, Math.min(99, v + delta));
+            valEl.textContent = v;
+            valEl.dataset.value = v;
+            valEl.classList.toggle('dolu', v > 0);
         }
+
+        // Dersin başlığındaki oku aç/kapat durumuna göre çevir (Bootstrap
+        // collapse olayını dinleyip aria-expanded'ı senkron tutuyoruz).
+        document.querySelectorAll('.ders-toggle').forEach(btn => {
+            const hedefId = btn.dataset.bsTarget;
+            const hedef = document.querySelector(hedefId);
+            hedef.addEventListener('shown.bs.collapse', () => btn.setAttribute('aria-expanded', 'true'));
+            hedef.addEventListener('hidden.bs.collapse', () => btn.setAttribute('aria-expanded', 'false'));
+        });
 
         async function analiziGonder() {
             const kayitlar = [];
-            document.querySelectorAll('.konu-chip').forEach(chip => {
-                const durum = chip.dataset.state;
-                if (durum === 'neutral') return;
-                const satir = { ders: chip.dataset.ders, konu: chip.dataset.konu, dogru: 0, yanlis: 0, bos: 0 };
-                if (durum === 'yanlis') satir.yanlis = 1;
-                else if (durum === 'bos') satir.bos = 1;
-                else if (durum === 'biliyorum') satir.dogru = 1;
-                kayitlar.push(satir);
+            document.querySelectorAll('.konu-row').forEach(row => {
+                const satir = { ders: row.dataset.ders, konu: row.dataset.konu, dogru: 0, yanlis: 0, bos: 0 };
+                row.querySelectorAll('.val').forEach(valEl => {
+                    satir[valEl.dataset.alan] = parseInt(valEl.dataset.value || '0', 10) || 0;
+                });
+                if (satir.dogru + satir.yanlis + satir.bos > 0) kayitlar.push(satir);
             });
 
             if (kayitlar.length === 0) {
-                alert('En az bir konuya dokunmalısın, ya da "Atla" ile geçebilirsin.');
+                alert('En az bir konuya değer girmelisin, ya da "Atla" ile geçebilirsin.');
                 return;
             }
 
@@ -179,7 +223,7 @@
                 const badgeMetin = s.durum === 'tekrarlayan' ? 'Tekrarlayan Hata' : (s.durum === 'zayif' ? 'Zayıf' : 'Sağlam');
                 const oneriMetin = s.onerilenSoru > 0 ? (s.onerilenSoru + ' soru öner') : 'Tekrar gerekmez';
                 return '<div class="sonuc-row ' + s.durum + '">' +
-                    '<div><div class="fw-bold small">' + s.konu + '</div><div class="text-secondary" style="font-size:.75rem;">' + s.ders + '</div></div>' +
+                    '<div><div class="fw-bold small">' + s.konu + '</div><div class="text-secondary" style="font-size:.75rem;">' + s.ders + ' · D:' + s.dogru + ' Y:' + s.yanlis + ' B:' + s.bos + '</div></div>' +
                     '<div class="text-end"><span class="badge-durum badge-' + s.durum + '">' + badgeMetin + '</span><div class="text-secondary mt-1" style="font-size:.72rem;">' + oneriMetin + '</div></div>' +
                     '</div>';
             }).join('');

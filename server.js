@@ -1375,9 +1375,29 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
     const hataDefteriDersSayilari = {};
     (hataKayitlari || []).forEach(h => { hataDefteriDersSayilari[h.subject] = (hataDefteriDersSayilari[h.subject] || 0) + 1; });
 
+    // Haftalık toplam soru hedefi - "günde 50-100/100-200/200-300" gibi
+    // belirsiz bantlar yerine modele NET bir sayı veriyoruz, aksi halde en
+    // fazla 8 satır × 60 soru sınırıyla çelişip gerçekte çok düşük (haftada
+    // 150-300 gibi) planlar üretiyordu. Bir YKS/KPSS adayının haftada en az
+    // birkaç yüz, iddialı bir öğrencinin ise ~1000 civarı soru çözmesi
+    // beklenir - net başarı yüzdesine göre kabaca ölçekliyoruz.
+    const netYuzdeleri = (sonAnalizler || [])
+        .map(a => {
+            const alanlar = NET_ALANLARI[a.sinav_turu];
+            const maxToplam = alanlar ? alanlar.reduce((s, al) => s + al.max, 0) : 0;
+            return maxToplam > 0 ? (Number(a.toplam_net) / maxToplam) * 100 : null;
+        })
+        .filter(v => v !== null);
+    const ortalamaNetYuzdesi = netYuzdeleri.length > 0 ? netYuzdeleri.reduce((s, v) => s + v, 0) / netYuzdeleri.length : null;
+    let haftalikHedefSoru;
+    if (ortalamaNetYuzdesi === null) haftalikHedefSoru = 700;
+    else if (ortalamaNetYuzdesi < 30) haftalikHedefSoru = 500;
+    else if (ortalamaNetYuzdesi < 70) haftalikHedefSoru = 800;
+    else haftalikHedefSoru = 1100;
+
     const plan = await generateHomeworkPlan({
         sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular, tekrarEdenZayifKonular,
-        izinliMufredat, sinavTarihi, kalanGun, sonAnalizler: sonAnalizler || [], hataDefteriDersSayilari
+        izinliMufredat, sinavTarihi, kalanGun, sonAnalizler: sonAnalizler || [], hataDefteriDersSayilari, haftalikHedefSoru
     });
     if (!plan || !Array.isArray(plan.odevler)) return;
 
@@ -1396,7 +1416,7 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
             return {
                 teacher_id: null, student_id: userId, exam_type: sinavTuru, subject: o.ders,
                 topics: o.konular.filter(k => dersKonulari.has(k)),
-                question_count: Number.isFinite(Number(o.soru_sayisi)) ? Math.min(60, Math.max(1, Math.round(Number(o.soru_sayisi)))) : 10,
+                question_count: Number.isFinite(Number(o.soru_sayisi)) ? Math.min(100, Math.max(1, Math.round(Number(o.soru_sayisi)))) : 10,
                 date_assigned: new Date().toISOString(), status: 'pending', completed: false, source: 'ai',
                 gun: o.gun, hafta_no: hedefHaftaNo
             };
@@ -2049,18 +2069,20 @@ app.get('/net-analiz/:analizId/konu-detay', requireLogin, async (req, res) => {
         if (!analiz) return res.status(404).send(errorPage('Bulunamadı', 'Bu analiz kaydı bulunamadı.', '/dashboard'));
 
         const alanlar = NET_ALANLARI[analiz.sinav_turu] || [];
-        // Sadece tam net alınamayan (en az bir soru kaçırılan) alanlar için
-        // konu detayı isteniyor - mükemmel net alınan bir derste tekrar
-        // sormanın anlamı yok.
-        const eksikAlanlar = alanlar.filter(a => Number(analiz.detaylar?.[a.id] ?? 0) < a.max);
-
+        // Sınavdaki TÜM dersler gösteriliyor (mükemmel net alınanlar dahil) -
+        // sadece eksik olanları göstermek kafa karıştırıyordu ("Fizik/Tarih
+        // niye yok" diye sorulmasına yol açtı). Bunun yerine her ders
+        // kart hâlinde kapalı geliyor, sadece mükemmel OLMAYAN dersler
+        // "eksik" işaretlenip otomatik açık başlıyor - öğrenci istediği
+        // (zaten tam olan) dersi de açıp kontrol edebilir.
         const dersGruplari = [];
         const gorulenDersler = new Set();
-        eksikAlanlar.forEach(alan => {
+        alanlar.forEach(alan => {
+            const eksik = Number(analiz.detaylar?.[alan.id] ?? 0) < alan.max;
             getKonuBreakdownDersleri(analiz.sinav_turu, alan.id).forEach(({ ders, konular }) => {
                 if (gorulenDersler.has(ders)) return;
                 gorulenDersler.add(ders);
-                dersGruplari.push({ ders, konular });
+                dersGruplari.push({ ders, konular, eksik });
             });
         });
 
