@@ -1781,6 +1781,28 @@ async function premiumVer(userId) {
 // aşağıdaki route'lar zaten her iki sağlayıcıyı da destekliyor.
 const AKTIF_SAGLAYICI = 'iyzico'; // 'iyzico' | 'paytr'
 
+// Mobil (Flutter) uygulaması web'deki gibi bir oturum çerezine sahip değil,
+// sadece bir Supabase erişim token'ı taşıyor - gerçek ödeme akışını
+// (iyzico/PayTR hosted form, Free/Premium kontrolü vb.) MOBİLDE TEKRAR
+// YAZMAK yerine, WebView bu uca ?token=... ile geliyor, biz token'ı
+// doğrulayıp normal bir web oturumu (session) başlatıyor ve /payment'e
+// yönlendiriyoruz - böylece mobil de web'le AYNI, gerçek ödeme kodunu kullanıyor.
+app.get('/mobil-odeme-giris', async (req, res) => {
+    try {
+        const token = req.query.token;
+        if (!token) return res.redirect('/login');
+        const { data: tokenData, error: tokenError } = await supabase.auth.getUser(token);
+        if (tokenError || !tokenData?.user) return res.redirect('/login');
+        const { data: user } = await supabase.from('profiles').select('*').eq('id', tokenData.user.id).maybeSingle();
+        if (!user) return res.redirect('/login');
+        syncSessionUser(req, user);
+        res.redirect('/payment');
+    } catch (error) {
+        console.error(error);
+        res.redirect('/login');
+    }
+});
+
 app.get('/payment', requireLogin, async (req, res) => {
     const user = await currentUser(req);
     if (!user) return res.redirect('/login');
@@ -2658,6 +2680,56 @@ app.post('/upgrade-premium', async (req, res) => {
         console.error(e);
         res.status(500).json({ success: false, message: 'Yükseltme işlemi tamamlanamadı.' });
     }
+});
+
+// ==========================================
+// GİZLİLİK POLİTİKASI & KULLANIM KOŞULLARI - herkese açık, bağımsız
+// sayfalar. İçerik register.html'deki KVKK/sözleşme modallarıyla AYNI
+// (kayıt sırasında zaten onaylanan metin) - Google Play Console gibi
+// yerlerin istediği "gizlilik politikası URL'si" için ayrı bir sayfa
+// olarak da erişilebilir olması gerekiyordu, modal içinde kilitli kalmamalı.
+// ==========================================
+app.get('/gizlilik-politikasi', (req, res) => {
+    const bodyHtml = `
+        <p>Mustafa Berke Karakanlı ("Veri Sorumlusu", SmartStudy markası altında faaliyet göstermektedir) olarak, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") uyarınca veri sorumlusu sıfatıyla, üyeliğiniz kapsamında aşağıdaki kişisel verilerinizi işlemekteyiz.</p>
+        <h6>1. İşlenen Kişisel Veriler</h6>
+        <p>Ad-soyad, e-posta adresi, şifreniz (geri döndürülemez biçimde şifrelenerek saklanır), rolünüz (öğrenci/öğretmen), akademik performans verileriniz (sınav netleri, analizler, ödevler, hata defteri kayıtları) ve platform kullanım kayıtlarınız.</p>
+        <h6>2. İşlenme Amacı</h6>
+        <p>Üyelik hesabınızın oluşturulması ve yönetimi, akademik analiz ve koçluk hizmetlerinin sunulması, hizmet kalitesinin artırılması ve yasal yükümlülüklerin yerine getirilmesi.</p>
+        <h6>3. Toplama Yöntemi</h6>
+        <p>Kişisel verileriniz, kayıt formu aracılığıyla, web sitesi ve mobil uygulama üzerinden elektronik ortamda, tarafınızca doğrudan girilmek suretiyle toplanmaktadır.</p>
+        <h6>4. Hukuki Sebep</h6>
+        <p>KVKK m.5/2 kapsamında bir sözleşmenin kurulması/ifası ve veri sorumlusunun meşru menfaati.</p>
+        <h6>5. Kişisel Verilerin Aktarıldığı Taraflar</h6>
+        <p>Verileriniz, platformun teknik altyapısını sağlayan şu hizmet sağlayıcılarla (yurt dışında konumlanmış sunucular dahil) paylaşılmaktadır: <strong>Supabase Inc.</strong> (veritabanı ve kimlik doğrulama altyapısı), <strong>Render Services Inc.</strong> (barındırma/sunucu hizmeti), <strong>Google LLC</strong> (Gemini AI - optik form okuma ve AI Koç özellikleri için) ve Premium ödeme aldığınızda <strong>iyzico</strong>/<strong>PayTR</strong> (ödeme işleme - kart bilgileriniz bize hiçbir zaman ulaşmaz, doğrudan bu sağlayıcıların kendi güvenli ödeme formlarına girilir). Bu aktarımlar, onayınız kapsamında ve yalnızca hizmetin sunulması için gerekli ölçüde yapılmaktadır.</p>
+        <h6>6. Saklama Süresi</h6>
+        <p>Verileriniz, üyeliğiniz aktif olduğu sürece ve ilgili mevzuatta öngörülen zamanaşımı süreleri boyunca saklanır; süre sonunda silinir, yok edilir veya anonim hale getirilir. Hesabınızı "Hesap Ayarları" üzerinden istediğiniz an kalıcı olarak silebilirsiniz.</p>
+        <h6>7. Haklarınız (KVKK m.11)</h6>
+        <p>Kişisel verinizin işlenip işlenmediğini öğrenme, işlenmişse buna ilişkin bilgi talep etme, işlenme amacını ve amacına uygun kullanılıp kullanılmadığını öğrenme, yurt içi/yurt dışında aktarıldığı üçüncü kişileri bilme, eksik/yanlış işlenmişse düzeltilmesini isteme, KVKK'da öngörülen şartlarda silinmesini/yok edilmesini isteme, düzeltme/silme işlemlerinin verilerin aktarıldığı üçüncü kişilere bildirilmesini isteme, münhasıran otomatik sistemlerle analiz edilmesi nedeniyle aleyhinize bir sonuç ortaya çıkmasına itiraz etme ve zarara uğramanız hâlinde zararın giderilmesini talep etme haklarına sahipsiniz.</p>
+        <h6>8. Reşit Olmayan Kullanıcılar</h6>
+        <p>18 yaşından küçükseniz, bu platformu kullanmak ve işbu Aydınlatma Metni kapsamında kişisel verilerinizin işlenmesine onay vermek için yasal temsilcinizin (anne, baba veya vasi) rızasını almış olmanız gerekmektedir. Kayıt sırasındaki onay kutusunu işaretleyerek, söz konusu rızayı aldığınızı beyan etmiş olursunuz.</p>
+        <p class="text-secondary small mt-4">Haklarınızı kullanmak için <a href="mailto:iletisim.smartstudy@gmail.com">iletisim.smartstudy@gmail.com</a> adresinden bizimle iletişime geçebilirsiniz.</p>
+    `;
+    res.render('legal', { title: 'Gizlilik Politikası', bodyHtml });
+});
+
+app.get('/kullanim-kosullari', (req, res) => {
+    const bodyHtml = `
+        <h6>1. Taraflar ve Konu</h6>
+        <p>İşbu sözleşme, SmartStudy platformuna üye olan kullanıcı ("Üye") ile SmartStudy arasında, platformun sunduğu akademik analiz, koçluk ve içerik hizmetlerinin kullanım şartlarını düzenler.</p>
+        <h6>2. Hesap Sorumluluğu</h6>
+        <p>Üye, kayıt sırasında verdiği bilgilerin doğruluğundan ve hesap güvenliğinin (şifresinin) korunmasından bizzat sorumludur.</p>
+        <h6>3. Hizmetin Kapsamı</h6>
+        <p>Platform; sınav net analizleri, kişiselleştirilmiş çalışma planları, dijital hata defteri, eğitim koçluğu eşleştirmesi ve (Premium üyelikte) video ders/not alma modüllerini içerir. Free ve Premium üyelik seviyeleri arasındaki özellik farkları platform içinde belirtilir.</p>
+        <h6>4. Premium Üyelik ve Ödeme</h6>
+        <p>Premium üyelik, 30 günlük tek seferlik bir satın almadır (otomatik yenilenen bir abonelik değildir), platform üzerinde belirtilen güncel fiyat üzerinden, iyzico/PayTR güvenli ödeme altyapısı ile tahsil edilir. İptal ve iade koşulları yürürlükteki mevzuata tabidir.</p>
+        <h6>5. Sorumluluğun Sınırlandırılması</h6>
+        <p>Platform üzerindeki analiz ve öneriler bilgilendirme amaçlıdır; akademik başarı garantisi teşkil etmez.</p>
+        <h6>6. Değişiklikler</h6>
+        <p>SmartStudy, işbu sözleşme koşullarını güncelleyebilir; güncel sürüm platform üzerinden yayımlandığı anda geçerli olur.</p>
+        <p class="text-secondary small mt-4">Sorularınız için <a href="mailto:iletisim.smartstudy@gmail.com">iletisim.smartstudy@gmail.com</a> adresinden bize ulaşabilirsiniz.</p>
+    `;
+    res.render('legal', { title: 'Kullanım Koşulları', bodyHtml });
 });
 
 // ==========================================
