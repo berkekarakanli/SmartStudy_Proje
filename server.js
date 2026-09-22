@@ -2211,14 +2211,21 @@ app.get('/net-analiz/:analizId/konu-detay', requireLogin, async (req, res) => {
         // kart hâlinde kapalı geliyor, sadece mükemmel OLMAYAN dersler
         // "eksik" işaretlenip otomatik açık başlıyor - öğrenci istediği
         // (zaten tam olan) dersi de açıp kontrol edebilir.
+        // Her ders kartına, o dersin bağlı olduğu net-giriş alanının TOPLAM
+        // soru sayısını (alanMax) da ekliyoruz - istemci bunu kullanarak
+        // "bu alanda konu bazında şu ana kadar kaç soru girdin, kaç kaldı"
+        // şeklinde canlı bir sayaç gösterebilsin. Bir alan (örn. "mat")
+        // birden fazla derse (Matematik + Geometri) bölünebildiği için
+        // sayaç ders bazında değil, PAYLAŞILAN ALAN bazında gruplanıyor.
         const dersGruplari = [];
         const gorulenDersler = new Set();
         alanlar.forEach(alan => {
-            const eksik = Number(analiz.detaylar?.[alan.id] ?? 0) < alan.max;
+            const alanNet = Number(analiz.detaylar?.[alan.id] ?? 0);
+            const eksik = alanNet < alan.max;
             getKonuBreakdownDersleri(analiz.sinav_turu, alan.id).forEach(({ ders, konular }) => {
                 if (gorulenDersler.has(ders)) return;
                 gorulenDersler.add(ders);
-                dersGruplari.push({ ders, konular, eksik });
+                dersGruplari.push({ ders, konular, eksik, alanId: alan.id, alanLabel: alan.label, alanMax: alan.max, alanNet });
             });
         });
 
