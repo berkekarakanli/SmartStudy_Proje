@@ -38,20 +38,6 @@
     <main class="container-fluid" style="max-width: 900px;">
         <p class="text-secondary mb-4"><%= user.email ? ('Merhaba, ' + user.email.split('@')[0]) : ('Merhaba, ' + user.ad) %></p>
 
-        <% if (typeof premiumKalanGun === 'number' && premiumKalanGun <= 5) { %>
-            <div class="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
-                <span>
-                    <i class="fas fa-crown me-2"></i>
-                    <% if (premiumKalanGun > 0) { %>
-                        Premium üyeliğin <strong><%= premiumKalanGun %> gün</strong> sonra bitiyor.
-                    <% } else { %>
-                        Premium üyeliğin bugün bitiyor.
-                    <% } %>
-                </span>
-                <a href="/payment" class="btn btn-sm btn-warning fw-bold text-dark">Yenile</a>
-            </div>
-        <% } %>
-
         <% if (analizler.length === 0) { %>
         <div class="glass mb-4">
             <h6 class="text-info orbitron mb-3" style="letter-spacing:1px;">GELİŞİM TREND GRAFİĞİ</h6>

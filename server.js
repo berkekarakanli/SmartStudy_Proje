@@ -19,18 +19,21 @@ const { odemeBaslat: paytrOdemeBaslat, bildirimDogrula: paytrBildirimDogrula, pa
 const app = express();
 
 // ==========================================
-// GEÇİCİ: PREMIUM SATIŞI DURAKLATILDI
+// PREMIUM/ÖDEME MODELİ TAMAMEN KALDIRILDI (geçici)
 // ==========================================
 // Berke, kullanıcı sayısı büyüyüp vergi/Bağkur ("genç girişimci") konusunu
-// netleştirene kadar Premium'u geçici olarak durdurmaya karar verdi (bkz.
-// sohbet, 2026-09-22). Bu true iken TÜM kullanıcılar hesaplarındaki gerçek
-// 'level' değeri ne olursa olsun Premium özelliklerine erişir ve ödeme
-// akışı devre dışı kalır. Hazır olunca burayı false yapmak yeterli - alttaki
-// kullaniciPremiumMi() her yerde kullanıldığı için tek satırlık geri dönüş.
-const PREMIUM_SATISTA_MI = false;
-function kullaniciPremiumMi(user) {
-    return PREMIUM_SATISTA_MI ? (user?.level === 'Premium') : true;
-}
+// netleştirene kadar ücretli üyeliği tamamen kaldırıp platformu herkese eşit
+// açık tutmaya karar verdi (bkz. sohbet, 2026-09-22). Artık "Premium/Free"
+// ayrımı yok - bunun yerine TÜM kullanıcılara aynı, cömert ama sınırsız
+// olmayan kullanım kotaları uygulanıyor ("hevesini alacak kadar uzun değil,
+// ama tadı damakta kalsın" - Berke'nin kendi tarifiyle). Ödeme altyapısı
+// (iyzico/PayTR, /api/payment/baslat vb.) koddan silinmedi, sadece
+// kullanılmıyor - ileride tekrar gerekirse buraya geri dönülür.
+const UCRETSIZ_KOTALAR = {
+    analizAylik: 8,        // Bir takvim ayında en fazla 8 net analizi kaydedilebilir
+    hataDefteriToplam: 15, // Hata defterinde toplamda en fazla 15 soru birikebilir
+    aiKocGunluk: 5         // AI Koç'a günde en fazla 5 mesaj gönderilebilir
+};
 
 // Render (ve genel olarak her reverse proxy arkasındaki Node servisi) için
 // zorunlu: bu olmadan Express "secure" cookie'yi doğru işleyemez ve
@@ -1172,7 +1175,7 @@ app.get('/dashboard', requireLogin, async (req, res) => {
 // Rozet sistemi: hepsi kullanıcının GERÇEK verisinden (kaç analiz yaptı, kaç
 // yanlış soru kaydetti, kaç dakika odaklandı, kaç kişi davet etti, vb.)
 // hesaplanıyor - hiçbiri sabit/gösterişlik değil, ya kazanılmış ya da kilitli.
-function computeBadges({ analizler, wrongCount, pomodoroDakika, referralCount, kocSayisi, isPremium }) {
+function computeBadges({ analizler, wrongCount, pomodoroDakika, referralCount, kocSayisi }) {
     const analizCount = analizler.length;
     const maxNet = analizler.reduce((max, a) => Math.max(max, Number(a.toplam_net || 0)), 0);
     const sinavTurleri = new Set(analizler.map(a => (a.sinav_turu || 'TYT').split('_')[0]));
@@ -1200,7 +1203,6 @@ function computeBadges({ analizler, wrongCount, pomodoroDakika, referralCount, k
         { id: 'koca-baglandin', icon: 'fa-user-tie', name: 'Koça Bağlandın', desc: 'Bir eğitim koçuna bağlandın', earned: kocSayisi >= 1 },
         { id: 'davetci', icon: 'fa-paper-plane', name: 'Davetçi', desc: 'İlk arkadaşını davet ettin', earned: referralCount >= 1 },
         { id: 'topluluk-elcisi', icon: 'fa-people-group', name: 'Topluluk Elçisi', desc: '5 arkadaş davet ettin', earned: referralCount >= 5 },
-        { id: 'premium-uye', icon: 'fa-certificate', name: 'Premium Üye', desc: "Premium'a yükseldin", earned: isPremium },
         { id: 'hos-geldin', icon: 'fa-hand-sparkles', name: 'Hoş Geldin', desc: 'SmartStudy ailesine katıldın', earned: true },
         { id: 'cok-yonlu', icon: 'fa-layer-group', name: 'Çok Yönlü', desc: 'Net analizi, hata defteri ve pomodoro\'nun hepsini kullandın', earned: analizCount >= 1 && wrongCount >= 1 && pomodoroDakika >= 1 },
         { id: 'azimli', icon: 'fa-infinity', name: 'Azimli', desc: '15 saat odaklan + 15 analiz + 15 yanlış soru kaydı', earned: pomodoroDakika >= 900 && analizCount >= 15 && wrongCount >= 15 }
@@ -1227,8 +1229,7 @@ app.get('/api/rozetler', async (req, res) => {
             wrongCount: (wrongQuestions || []).length,
             pomodoroDakika,
             referralCount: Number(user.referral_count || 0),
-            kocSayisi: kocListesi.length,
-            isPremium: user.level === 'Premium'
+            kocSayisi: kocListesi.length
         });
 
         res.json({ success: true, badges, pomodoroDakika, hasCoach: kocListesi.length > 0 });
@@ -1265,8 +1266,7 @@ app.get('/profile', requireLogin, async (req, res) => {
         wrongCount: (wrongQuestions || []).length,
         pomodoroDakika,
         referralCount,
-        kocSayisi: kocListesi.length,
-        isPremium: user.level === 'Premium'
+        kocSayisi: kocListesi.length
     });
 
     // Rozet kazanma anını (ve bir kerelik bildirimi) yakalamak için - hangi
@@ -1406,7 +1406,7 @@ app.get('/wrong-questions', requireLogin, async (req, res) => {
         const { data: questionsRaw } = await supabase.from('wrong_questions').select('*').eq('user_id', user.id);
         const questions = (questionsRaw || []).sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
 
-        const limitReached = !kullaniciPremiumMi(user) && questions.length >= 5;
+        const limitReached = questions.length >= UCRETSIZ_KOTALAR.hataDefteriToplam;
 
         res.render('wrong-questions', { user, questions, limitReached, tumDersler: getTumDersler() });
     } catch (error) {
@@ -1632,13 +1632,13 @@ app.post('/api/ai-koc/mesaj-gonder', requireLogin, async (req, res) => {
         const mesaj = typeof req.body.mesaj === 'string' ? req.body.mesaj.trim().slice(0, 1000) : '';
         if (!mesaj) return res.status(400).json({ success: false, message: 'Boş mesaj gönderilemez.' });
 
-        // Free: günde 5 mesaj. Premium: sınırsız.
-        if (!kullaniciPremiumMi(user)) {
+        // Günlük mesaj kotası - herkes için aynı.
+        {
             const gunBasi = new Date(); gunBasi.setHours(0, 0, 0, 0);
             const { count } = await supabase.from('ai_mesajlar').select('id', { count: 'exact', head: true })
                 .eq('user_id', user.id).eq('rol', 'user').gte('tarih', gunBasi.toISOString());
-            if ((count || 0) >= 5) {
-                return res.status(403).json({ success: false, message: 'Free üyelikte günde 5 mesaj hakkın var. Sınırsız sohbet için Premium\'a geçebilirsin.', limitDoldu: true });
+            if ((count || 0) >= UCRETSIZ_KOTALAR.aiKocGunluk) {
+                return res.status(403).json({ success: false, message: `Günde en fazla ${UCRETSIZ_KOTALAR.aiKocGunluk} mesaj gönderebilirsin, yarın tekrar yazabilirsin.`, limitDoldu: true });
             }
         }
 
@@ -1775,10 +1775,7 @@ app.get('/leaderboard', requireLogin, async (req, res) => {
             .filter(u => Number(u.en_yuksek_net || 0) > 0)
             .sort((a, b) => Number(b.en_yuksek_net) - Number(a.en_yuksek_net));
 
-        const isPremium = kullaniciPremiumMi(user);
-        const visibleList = isPremium ? fullList : fullList.slice(0, 5);
-
-        res.render('leaderboard', { user, visibleList, isPremium, fullListLength: fullList.length });
+        res.render('leaderboard', { user, visibleList: fullList });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Liderlik tablosu yüklenirken sorun oluştu.', '/dashboard'));
@@ -1857,21 +1854,20 @@ app.get('/payment', requireLogin, async (req, res) => {
     const user = await currentUser(req);
     if (!user) return res.redirect('/login');
 
-    res.render('payment', {
-        premiumFiyat: PREMIUM_FIYAT_TL,
-        odemeAktif: PREMIUM_SATISTA_MI && (AKTIF_SAGLAYICI === 'paytr' ? paytrAktif : iyzicoAktif),
-        premiumDuraklatildi: !PREMIUM_SATISTA_MI,
-        odemeBasarisiz: req.query.durum === 'basarisiz' || req.query.durum === 'hata'
-    });
+    res.render('payment', {});
 });
 
 // Gerçek ödeme - aktif sağlayıcının kendi barındırdığı ödeme formunu/
 // iframe'ini başlatır. Kart bilgisi hiçbir zaman bizim sunucumuza gelmiyor.
+// Ücretli üyelik modeli kaldırıldığı için bu uç nokta şimdilik devre dışı -
+// alttaki iyzico/PayTR entegrasyonu koddan silinmedi, sadece çağrılmıyor.
+// Geri açmak için ODEME_AKTIF'i true yapmak yeterli.
+const ODEME_AKTIF = false;
 app.post('/api/payment/baslat', requireLogin, async (req, res) => {
+    if (!ODEME_AKTIF) return res.status(503).json({ success: false, message: 'Ücretli üyelik şu an mevcut değil.' });
     try {
         const user = await currentUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
-        if (!PREMIUM_SATISTA_MI) return res.status(503).json({ success: false, message: 'Premium satışı şu an duraklatıldı - tüm özellikler zaten ücretsiz açık.' });
         if (user.level === 'Premium') return res.status(400).json({ success: false, message: 'Zaten Premium üyesin.' });
 
         const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '85.34.78.112';
@@ -2003,9 +1999,7 @@ app.post('/add-video', requireLogin, async (req, res) => {
 
 app.get('/premium-dersler', requireLogin, async (req, res) => {
     const user = await currentUser(req);
-    if (!user || !kullaniciPremiumMi(user)) {
-        return res.status(403).send(errorPage('Premium Gerekli', 'Bu laboratuvar sadece Premium üyeler içindir.', '/payment'));
-    }
+    if (!user) return res.redirect('/login');
 
     const { data: notlar } = await supabase.from('video_notlari').select('*').eq('user_id', user.id);
 
@@ -2122,6 +2116,16 @@ app.post('/generate-plan', requireUser, async (req, res) => {
             }
         }
 
+        // Aylık analiz kotası - bu ay içinde kaydedilen analiz sayısı.
+        const ayBasi = new Date(); ayBasi.setDate(1); ayBasi.setHours(0, 0, 0, 0);
+        const { count: buAykiAnalizSayisi } = await supabase.from('analizler').select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id).gte('tarih', ayBasi.toISOString());
+        if ((buAykiAnalizSayisi || 0) >= UCRETSIZ_KOTALAR.analizAylik) {
+            const mesaj = `Bu ay için net analizi hakkın doldu (aylık limit: ${UCRETSIZ_KOTALAR.analizAylik}). Yeni ay başında tekrar analiz kaydedebilirsin.`;
+            if (wantsJson(req)) return res.status(403).json({ success: false, message: mesaj });
+            return res.status(403).send(errorPage('Aylık Limit Doldu', mesaj, '/dashboard'));
+        }
+
         const { data: newAnaliz, error: analizError } = await supabase.from('analizler').insert({
             user_id: user.id,
             sinav_turu: sinav_turu,
@@ -2181,21 +2185,9 @@ app.get('/net-analiz/:analizId/konu-detay', requireLogin, async (req, res) => {
 
         const alanlar = NET_ALANLARI[analiz.sinav_turu] || [];
 
-        // Konu bazlı (doğru/yanlış/boş) detaylı analiz PREMIUM özelliği - Free
-        // kullanıcı hiçbir şey girmeden, sadece net yüzdesine bakan basit bir
-        // otomatik özet görüyor. İkisi de aynı sayfada, kart açılıp
-        // kapanmasıyla ilgisi yok - Free'de konu listesi hiç gösterilmiyor.
-        const isPremium = kullaniciPremiumMi(user);
-        if (!isPremium) {
-            const alanOzet = alanlar
-                .map(alan => {
-                    const net = Number(analiz.detaylar?.[alan.id] ?? 0);
-                    const yuzde = alan.max > 0 ? Math.round((net / alan.max) * 100) : 0;
-                    return { label: alan.label, yuzde };
-                })
-                .sort((a, b) => a.yuzde - b.yuzde);
-            return res.render('konu-detay', { user, analiz, dersGruplari: [], isPremium: false, alanOzet });
-        }
+        // Konu bazlı (doğru/yanlış/boş) detaylı analiz artık herkese açık -
+        // eskiden Premium'a özeldi, ücretli üyelik kaldırılınca bu ayrım da
+        // kalktı (bkz. üstteki UCRETSIZ_KOTALAR notu).
         // Sınavdaki TÜM dersler gösteriliyor (mükemmel net alınanlar dahil) -
         // sadece eksik olanları göstermek kafa karıştırıyordu ("Fizik/Tarih
         // niye yok" diye sorulmasına yol açtı). Bunun yerine her ders
@@ -2215,7 +2207,7 @@ app.get('/net-analiz/:analizId/konu-detay', requireLogin, async (req, res) => {
 
         if (dersGruplari.length === 0) return res.redirect('/dashboard');
 
-        res.render('konu-detay', { user, analiz, dersGruplari, isPremium: true, alanOzet: null });
+        res.render('konu-detay', { user, analiz, dersGruplari });
     } catch (error) {
         console.error(error);
         res.status(500).send(errorPage('Hata', 'Konu detayı yüklenirken sorun oluştu.', '/dashboard'));
@@ -2433,10 +2425,10 @@ app.post('/api/wrong-questions/add', async (req, res) => {
         const user = await resolveUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
 
-        if (!kullaniciPremiumMi(user)) {
+        {
             const { count } = await supabase.from('wrong_questions').select('id', { count: 'exact', head: true }).eq('user_id', user.id);
-            if ((count || 0) >= 5) {
-                return res.status(403).json({ success: false, message: 'Free üyelikte hata defterine en fazla 5 soru eklenebilir. Premium\'a geçerek sınırsız ekleyebilirsin.' });
+            if ((count || 0) >= UCRETSIZ_KOTALAR.hataDefteriToplam) {
+                return res.status(403).json({ success: false, message: `Hata defterine en fazla ${UCRETSIZ_KOTALAR.hataDefteriToplam} soru ekleyebilirsin. Yer açmak için eski bir soruyu silebilirsin.` });
             }
         }
 
@@ -2772,9 +2764,9 @@ app.get('/kullanim-kosullari', (req, res) => {
         <h6>2. Hesap Sorumluluğu</h6>
         <p>Üye, kayıt sırasında verdiği bilgilerin doğruluğundan ve hesap güvenliğinin (şifresinin) korunmasından bizzat sorumludur.</p>
         <h6>3. Hizmetin Kapsamı</h6>
-        <p>Platform; sınav net analizleri, kişiselleştirilmiş çalışma planları, dijital hata defteri, eğitim koçluğu eşleştirmesi ve (Premium üyelikte) video ders/not alma modüllerini içerir. Free ve Premium üyelik seviyeleri arasındaki özellik farkları platform içinde belirtilir.</p>
-        <h6>4. Premium Üyelik ve Ödeme</h6>
-        <p>Premium üyelik, 30 günlük tek seferlik bir satın almadır (otomatik yenilenen bir abonelik değildir), platform üzerinde belirtilen güncel fiyat üzerinden, iyzico/PayTR güvenli ödeme altyapısı ile tahsil edilir. İptal ve iade koşulları yürürlükteki mevzuata tabidir.</p>
+        <p>Platform; sınav net analizleri, kişiselleştirilmiş çalışma planları, dijital hata defteri, eğitim koçluğu eşleştirmesi ve video ders/not alma modüllerini içerir. Platform şu anda tamamen ücretsizdir; bazı özelliklerde adil kullanım amacıyla makul kullanım sınırları uygulanabilir, bu sınırlar platform içinde belirtilir.</p>
+        <h6>4. Ücretsiz Kullanım</h6>
+        <p>Platform şu anda herhangi bir ücret talep etmemektedir. İleride ücretli bir üyelik modeli sunulması hâlinde, koşulları ve fiyatlandırması önceden platform üzerinde duyurulur.</p>
         <h6>5. Sorumluluğun Sınırlandırılması</h6>
         <p>Platform üzerindeki analiz ve öneriler bilgilendirme amaçlıdır; akademik başarı garantisi teşkil etmez.</p>
         <h6>6. Değişiklikler</h6>

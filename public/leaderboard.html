@@ -55,19 +55,10 @@
                     <% visibleList.forEach((u, i) => { %>
                         <tr>
                             <td class="text-center"><span class="badge <%= i < 3 ? 'bg-warning text-dark' : 'bg-secondary' %>"><%= i + 1 %></span></td>
-                            <td><%= u.ad %> <% if (u.level === 'Premium') { %><i class="fas fa-badge-check text-info ms-1" title="Premium"></i><% } %></td>
+                            <td><%= u.ad %></td>
                             <td class="text-end text-warning fw-bold"><%= Number(u.en_yuksek_net).toFixed(2) %> NET</td>
                         </tr>
                     <% }) %>
-                    <% if (!isPremium && fullListLength > 5) { %>
-                        <tr>
-                            <td colspan="3" class="text-center py-4">
-                                <i class="fas fa-lock text-warning mb-2 d-block"></i>
-                                <span class="text-warning small">Free üyeler yalnızca ilk 5 kişiyi görebilir.</span>
-                                <a href="/payment" class="btn btn-warning btn-sm fw-bold ms-2">Premium'a Geç</a>
-                            </td>
-                        </tr>
-                    <% } %>
                 </tbody>
             </table>
         </div>

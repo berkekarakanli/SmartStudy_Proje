@@ -90,32 +90,6 @@
             <a href="/dashboard" class="text-secondary small text-decoration-none flex-shrink-0">Atla, sonra yaparım</a>
         </div>
 
-        <% if (!isPremium) { %>
-        <div class="ai-bubble">
-            <div class="ai-avatar"><i class="fas fa-brain"></i></div>
-            <div class="ai-bubble-text">
-                Netlerini sisteme kaydettim! Net yüzdene göre hızlı bir özet çıkardım. Hangi konudan kaç doğru/yanlış/boş
-                yaptığını tek tek girip çok daha isabetli (konu bazlı) bir program istersen, bu detaylı analiz Premium'da.
-            </div>
-        </div>
-
-        <div class="ders-card" style="padding:18px;">
-            <h6 class="text-info mb-3" style="font-family:'Orbitron', sans-serif; letter-spacing:.5px; font-size:.82rem;">Ders Bazlı Net Yüzden</h6>
-            <% alanOzet.forEach(a => { %>
-            <div class="d-flex justify-content-between align-items-center py-2" style="border-top:1px solid rgba(255,255,255,.05);">
-                <span class="small" style="color:#cbd5e1;"><%= a.label %></span>
-                <span class="small fw-bold" style="color:<%= a.yuzde < 50 ? '#f87171' : (a.yuzde < 80 ? '#ffc107' : '#4ade80') %>;">%<%= a.yuzde %></span>
-            </div>
-            <% }) %>
-        </div>
-
-        <div class="ders-card" style="padding:22px; text-align:center; border-color:rgba(255,193,7,.35);">
-            <i class="fas fa-crown text-warning mb-2" style="font-size:1.4rem;"></i>
-            <p class="small text-secondary mb-3">Premium'da her konudan kaç doğru/yanlış/boş yaptığını +/- ile hızlıca girip, sana özel (yapay zeka beklemeden) konu konu ne kadar soru çözmen gerektiğini gösteriyoruz - haftalık programın da buna göre güncelleniyor.</p>
-            <a href="/payment" class="btn btn-warning fw-bold text-dark btn-sm px-4">Premium'a Geç</a>
-        </div>
-        <div class="text-center mt-3"><a href="/dashboard" class="text-secondary small text-decoration-none">Panele Dön</a></div>
-        <% } else { %>
         <div id="formAlani">
             <div class="ai-bubble">
                 <div class="ai-avatar"><i class="fas fa-brain"></i></div>
@@ -163,7 +137,6 @@
                 <span id="gonderSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>Analizi Tamamla
             </button>
         </div>
-        <% } %>
 
         <div id="sonucAlani" class="d-none">
             <div class="alert alert-success small mb-3"><i class="fas fa-circle-check me-2"></i>Analiz tamamlandı, haftalık programın arka planda güncelleniyor - Koçum sekmesinde birazdan görebilirsin.</div>
