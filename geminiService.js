@@ -260,7 +260,7 @@ Kurallar (kesinlikle uy):
  * @param {Record<string, number>} [girdi.hataDefteriDersSayilari] - { dersAdi: kaç adet hata defteri kaydı var } - içerik/not analiz edilmez, sadece hangi derste tekrar var diye sayılır.
  * @returns {Promise<{ odevler: Array<{ders:string, konular:string[], soru_sayisi:number, gun:string}> }|null>}
  */
-async function generateHomeworkPlan({ sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular, tekrarEdenZayifKonular, izinliMufredat, sinavTarihi, kalanGun, sonAnalizler, hataDefteriDersSayilari, haftalikHedefSoru }) {
+async function generateHomeworkPlan({ sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular, tekrarEdenZayifKonular, izinliMufredat, sinavTarihi, kalanGun, sonAnalizler, hataDefteriDersSayilari, haftalikHedefSoru, ortalamaNetYuzdesi }) {
     if (!ai) return null;
 
     try {
@@ -315,6 +315,8 @@ Hedeflediği sınav: ${sinavTuru}
 Hedefi (bilgi amaçlı, tahmin için kullanma): ${hedef || 'belirtilmemiş'}
 Sınav tarihi: ${sinavTarihi}
 Bugünden sınava kalan gün: ${kalanGun}
+ORTALAMA NET BAŞARI YÜZDESİ (son analizlerin ortalaması, 0-100 arası): ${ortalamaNetYuzdesi !== null && ortalamaNetYuzdesi !== undefined ? Math.round(ortalamaNetYuzdesi) + '%' : 'veri yok (henüz analiz girmemiş)'}
+- Bu yüzde SEVİYE tespiti için asıl referansın olsun. %70 ve üzeri: öğrenci İLERİ seviyede, müfredatın giriş/temel konularını (ders adında "temel", "giriş" geçen ya da listenin en başındaki konular) KESİNLİKLE ÖNERME - onun yerine zayıf/tekrarlayan konulara, ileri seviye pratiğe ve deneme çözümüne odaklan. %40-70 arası: orta seviye, karışık (hem temel eksik hem ileri konu) bir plan uygun olabilir. %40 altı ya da veri yoksa: temelden başlamak makul.
 
 Öğrencinin ZATEN BİTİRDİĞİNİ söylediği konular (bunları yeniden "öğren" diye VERME - AMA aşağıdaki "hata defteri" ya da "zayıf konular" listesinde AYNI konu/ders tekrar geçiyorsa, öğrencinin bu konuyu aslında TAM öğrenmediği anlamına gelir, o zaman bu konu için mutlaka bir "tekrar/pekiştirme" görevi koy - "zaten bitirdi" diye asla atlama):
 ${tamamlananMetni || 'Henüz bildirilmemiş.'}
@@ -337,7 +339,7 @@ ${mufredatMetni}
 Kurallar (kesinlikle uy):
 - SADECE aşağıdaki JSON şemasına uygun, geçerli bir JSON döndür. JSON dışında TEK BİR KARAKTER bile yazma (açıklama, markdown, kod bloğu işareti vs. YOK).
 - Konular SADECE "İZİN VERİLEN MÜFREDAT" listesinden seçilecek, listede olmayan hiçbir konu adı kullanılmayacak. "ders" alanı da İZİN VERİLEN MÜFREDAT'taki ders adının BİREBİR AYNISI olmalı (örn. "Türkçe" değil, tam olarak "Türkçe / Türk Dili ve Edebiyatı" yaz - listede nasıl yazıyorsa öyle).
-- SABİT/DOGMA bir sıralama yok, dinamik karar ver: net başarı yüzdesi yüksek (örn. 120 üzerinden 100+ gibi) bir öğrenciye müfredatın en başındaki temel/giriş konularını önerme - onun yerine deneme geçmişinde SÜREKLİ zayıf çıkan derse ve zaten bitirdiği konulara bakıp SPESİFİK, ileri seviye eksiğe odaklan. Net başarı yüzdesi düşükse temel konulardan başlamak uygun olabilir.
+- SABİT/DOGMA bir sıralama yok, dinamik karar ver: yukarıdaki ORTALAMA NET BAŞARI YÜZDESİ yüksekse (bkz. üstteki eşik kuralı) müfredatın en başındaki temel/giriş konularını KESİNLİKLE önerme - onun yerine deneme geçmişinde SÜREKLİ zayıf çıkan derse ve zaten bitirdiği konulara bakıp SPESİFİK, ileri seviye eksiğe odaklan. Net başarı yüzdesi düşükse temel konulardan başlamak uygun olabilir.
 - "Öğrencinin KENDİ AĞZINDAN belirttiği zayıf konular" varsa bunlar HER ZAMAN plandaki EN ÖNCELİKLİ satırlar olmalı - net yüzdesi o derste yüksek görünse bile (örn. bir dersten 120 üzerinden 119 alsa bile), öğrenci kendi söylemişse o konu mutlaka programa girer.
 - "TEKRARLAYAN HATA UYARISI" listesindeki konular MUTLAKA programa girer ve o konunun soru_sayisi'sini aynı dersteki diğer satırlardan gözle görülür şekilde YÜKSEK tut (örn. normalde 10-15 soru önerilecek bir konu tekrarlıyorsa 20-30 soru öner) - öğrenci bu konuda birden fazla kez hata yaptığı için standart dozaj yetmiyor.
 - Zayıflık tespitini TEK bir denemeye göre değil, verilen deneme geçmişinin ORTALAMASINA göre yap - bir derste tek seferlik düşük net rastlantı olabilir, birkaç denemede tekrar eden düşüklük gerçek zayıflıktır.

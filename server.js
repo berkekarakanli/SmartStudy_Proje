@@ -1461,9 +1461,26 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
 
     const plan = await generateHomeworkPlan({
         sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular, tekrarEdenZayifKonular,
-        izinliMufredat, sinavTarihi, kalanGun, sonAnalizler: sonAnalizler || [], hataDefteriDersSayilari, haftalikHedefSoru
+        izinliMufredat, sinavTarihi, kalanGun, sonAnalizler: sonAnalizler || [], hataDefteriDersSayilari, haftalikHedefSoru,
+        ortalamaNetYuzdesi
     });
     if (!plan || !Array.isArray(plan.odevler)) return;
+
+    // AI modeli (küçük/ucuz bir model) haftalık toplam soru hedefini metinden
+    // kendi toplayıp tutturmakta güvenilir değil - gözlemlenen davranış,
+    // hedefin çok altında (örn. 1100 istenirken ~150-200) planlar üretmesiydi.
+    // Modelin ders/konu seçimini olduğu gibi koruyup SADECE toplam hacmi
+    // orantılı şekilde hedefe yaklaştırıyoruz (matematiği koda bırakıyoruz).
+    {
+        const gecerliOdevSatirlari = plan.odevler.filter(o => o && Number.isFinite(Number(o.soru_sayisi)));
+        const mevcutToplam = gecerliOdevSatirlari.reduce((s, o) => s + Number(o.soru_sayisi) * (o.gun === 'Her gün' ? 7 : 1), 0);
+        if (mevcutToplam > 0 && mevcutToplam < haftalikHedefSoru * 0.6) {
+            const carpan = haftalikHedefSoru / mevcutToplam;
+            gecerliOdevSatirlari.forEach(o => {
+                o.soru_sayisi = Math.min(100, Math.max(5, Math.round(Number(o.soru_sayisi) * carpan)));
+            });
+        }
+    }
 
     const { data: mevcutProfil } = await supabase.from('profiles').select('hafta_no').eq('id', userId).single();
     const suankiHafta = mevcutProfil?.hafta_no || 0;
