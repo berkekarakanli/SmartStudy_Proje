@@ -1462,7 +1462,7 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
     const plan = await generateHomeworkPlan({
         sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular, tekrarEdenZayifKonular,
         izinliMufredat, sinavTarihi, kalanGun, sonAnalizler: sonAnalizler || [], hataDefteriDersSayilari, haftalikHedefSoru,
-        ortalamaNetYuzdesi
+        ortalamaNetYuzdesi, sonAnalizTuru: (sonAnalizler || [])[0]?.sinav_turu || null
     });
     if (!plan || !Array.isArray(plan.odevler)) return;
 
@@ -1477,7 +1477,7 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
         if (mevcutToplam > 0 && mevcutToplam < haftalikHedefSoru * 0.6) {
             const carpan = haftalikHedefSoru / mevcutToplam;
             gecerliOdevSatirlari.forEach(o => {
-                o.soru_sayisi = Math.min(100, Math.max(5, Math.round(Number(o.soru_sayisi) * carpan)));
+                o.soru_sayisi = Math.min(200, Math.max(5, Math.round(Number(o.soru_sayisi) * carpan)));
             });
         }
     }
@@ -1497,7 +1497,7 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
             return {
                 teacher_id: null, student_id: userId, exam_type: sinavTuru, subject: o.ders,
                 topics: o.konular.filter(k => dersKonulari.has(k)),
-                question_count: Number.isFinite(Number(o.soru_sayisi)) ? Math.min(100, Math.max(1, Math.round(Number(o.soru_sayisi)))) : 10,
+                question_count: Number.isFinite(Number(o.soru_sayisi)) ? Math.min(200, Math.max(1, Math.round(Number(o.soru_sayisi)))) : 10,
                 date_assigned: new Date().toISOString(), status: 'pending', completed: false, source: 'ai',
                 gun: o.gun, hafta_no: hedefHaftaNo
             };
