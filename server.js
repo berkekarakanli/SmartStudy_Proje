@@ -1416,6 +1416,72 @@ app.get('/wrong-questions', requireLogin, async (req, res) => {
 });
 
 const GECERLI_GUNLER = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+// Hafta sonu artık AI'nin serbestçe ödev dağıttığı günler değil - sabit
+// olarak deneme sınavı + hata analizine ayrılmış (bkz. denemeSatirlariOlustur).
+const HAFTA_ICI_GUNLER = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma'];
+
+// Paragraf/Problem/Geometri gibi "beceri" pratiğinin AI'nin insafına
+// bırakılınca güvenilmez (bazen hiç eklenmiyor, bazen çok düşük sayıyla)
+// olduğu gözlemlendi - artık bu satırlar kod tarafında GARANTİLİ olarak,
+// her sınav türünün kendi müfredat yapısına göre üretiliyor. Konu adları
+// SYLLABUS'taki gerçek isimlerle otomatik eşleşsin diye basit bir anahtar
+// kelime filtresi kullanılıyor (elle kopyalanan metinlerin curriculum.js
+// güncellendiğinde sessizce bozulması riskine karşı).
+function sabitGunlukPratikOlustur(sinavTuru, izinliMufredat) {
+    const konuFiltre = (dersAdi, pattern) => (izinliMufredat[dersAdi] || []).filter(k => pattern.test(k));
+    const tanimlar = [];
+
+    if (sinavTuru === 'TYT' || sinavTuru === 'TYT+AYT') {
+        const problemKonulari = konuFiltre('Matematik', /problem/i);
+        const matKonulari = problemKonulari.length > 0 ? problemKonulari : (izinliMufredat['Matematik'] || []);
+        if (matKonulari.length > 0) tanimlar.push({ ders: 'Matematik', konular: matKonulari.slice(0, 4), soru_sayisi: 20 });
+
+        const turkceDersAdi = 'Türkçe / Türk Dili ve Edebiyatı';
+        const paragrafKonulari = konuFiltre(turkceDersAdi, /paragraf/i);
+        if (paragrafKonulari.length > 0) tanimlar.push({ ders: turkceDersAdi, konular: paragrafKonulari.slice(0, 4), soru_sayisi: 25 });
+
+        if (Array.isArray(izinliMufredat['Geometri']) && izinliMufredat['Geometri'].length > 0) {
+            tanimlar.push({ ders: 'Geometri', konular: izinliMufredat['Geometri'].slice(0, 4), soru_sayisi: 25 });
+        }
+    } else if (sinavTuru === 'LGS') {
+        // LGS'de Matematik ve Geometri ayrı ders değil, tek "Matematik"
+        // altında - kendi sınav büyüklüğüne göre daha ölçülü bir hacim.
+        const matKonulari = izinliMufredat['Matematik'] || [];
+        if (matKonulari.length > 0) tanimlar.push({ ders: 'Matematik', konular: matKonulari.slice(0, 4), soru_sayisi: 15 });
+
+        const turkceDersAdi = 'Türkçe / Türk Dili ve Edebiyatı';
+        const paragrafKonulari = konuFiltre(turkceDersAdi, /paragraf/i);
+        if (paragrafKonulari.length > 0) tanimlar.push({ ders: turkceDersAdi, konular: paragrafKonulari.slice(0, 4), soru_sayisi: 15 });
+    } else if (sinavTuru === 'KPSS') {
+        const problemKonulari = konuFiltre('Matematik', /problem/i);
+        const matKonulari = problemKonulari.length > 0 ? problemKonulari : (izinliMufredat['Matematik'] || []);
+        if (matKonulari.length > 0) tanimlar.push({ ders: 'Matematik', konular: matKonulari.slice(0, 4), soru_sayisi: 20 });
+
+        const paragrafKonulari = konuFiltre('Türkçe', /paragraf/i);
+        if (paragrafKonulari.length > 0) tanimlar.push({ ders: 'Türkçe', konular: paragrafKonulari.slice(0, 4), soru_sayisi: 20 });
+    }
+
+    return tanimlar;
+}
+
+// Hafta sonu (Cumartesi/Pazar) artık her zaman deneme sınavı + hata
+// analizi için ayrılmış - AI'nin bunu unutması/es geçmesi ihtimaline karşı
+// kod tarafında garanti ediliyor. YKS adayı (TYT+AYT) için hafta sonu iki
+// güne bölünüp gerçekçi bir koçluk pratiği izleniyor (Cumartesi TYT,
+// Pazar AYT denemesi).
+function denemeSatirlariOlustur(sinavTuru) {
+    if (sinavTuru === 'TYT+AYT') {
+        return [
+            { gun: 'Cumartesi', konu: 'TYT Deneme Sınavı Çöz + Yanlış/Boş Çıkan Soruları Hata Defterine Ekleyip İncele' },
+            { gun: 'Pazar', konu: 'AYT Deneme Sınavı Çöz + Yanlış/Boş Çıkan Soruları Hata Defterine Ekleyip İncele' }
+        ];
+    }
+    const etiket = sinavTuru === 'LGS' ? 'LGS' : (sinavTuru === 'KPSS' ? 'KPSS' : 'TYT');
+    return [
+        { gun: 'Cumartesi', konu: `${etiket} Deneme Sınavı Çöz + Yanlış/Boş Çıkan Soruları Hata Defterine Ekleyip İncele` },
+        { gun: 'Pazar', konu: `${etiket} Deneme Sınavı Çöz + Hata Defterini Gözden Geçir` }
+    ];
+}
 
 // AI Koç ödev planını üretip homeworks'e yazan ortak fonksiyon - hem sohbet
 // sırasında (sınıf/tamamlanan/zayıf konu değiştiğinde, sessizce) hem de
@@ -1439,12 +1505,13 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
     const hataDefteriDersSayilari = {};
     (hataKayitlari || []).forEach(h => { hataDefteriDersSayilari[h.subject] = (hataDefteriDersSayilari[h.subject] || 0) + 1; });
 
-    // Haftalık toplam soru hedefi - "günde 50-100/100-200/200-300" gibi
-    // belirsiz bantlar yerine modele NET bir sayı veriyoruz, aksi halde en
-    // fazla 8 satır × 60 soru sınırıyla çelişip gerçekte çok düşük (haftada
-    // 150-300 gibi) planlar üretiyordu. Bir YKS/KPSS adayının haftada en az
-    // birkaç yüz, iddialı bir öğrencinin ise ~1000 civarı soru çözmesi
-    // beklenir - net başarı yüzdesine göre kabaca ölçekliyoruz.
+    // Günlük soru hedefi - Berke'nin kendi tarifiyle: "45 soru ile kimse
+    // kazanamaz", ciddi bir YKS adayı günde 250-300'e yakın (TYT ~150 +
+    // AYT ~150), LGS/KPSS kendi sınav büyüklüğüne göre daha düşük ama yine
+    // ciddi bir hacim çözmeli. Sınav türüne ve net başarı geçmişine göre
+    // kademeleniyor - matematiği (toplama/çarpma) modele değil koda
+    // bırakıyoruz, model küçük/ucuz bir model olduğu için bunu tutarlı
+    // yapamıyordu.
     const netYuzdeleri = (sonAnalizler || [])
         .map(a => {
             const alanlar = NET_ALANLARI[a.sinav_turu];
@@ -1453,11 +1520,27 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
         })
         .filter(v => v !== null);
     const ortalamaNetYuzdesi = netYuzdeleri.length > 0 ? netYuzdeleri.reduce((s, v) => s + v, 0) / netYuzdeleri.length : null;
-    let haftalikHedefSoru;
-    if (ortalamaNetYuzdesi === null) haftalikHedefSoru = 700;
-    else if (ortalamaNetYuzdesi < 30) haftalikHedefSoru = 500;
-    else if (ortalamaNetYuzdesi < 70) haftalikHedefSoru = 800;
-    else haftalikHedefSoru = 1100;
+
+    let gunlukHedefSoru;
+    if (sinavTuru === 'TYT+AYT') {
+        gunlukHedefSoru = ortalamaNetYuzdesi === null ? 220 : (ortalamaNetYuzdesi < 30 ? 200 : (ortalamaNetYuzdesi < 70 ? 250 : 300));
+    } else if (sinavTuru === 'TYT') {
+        gunlukHedefSoru = ortalamaNetYuzdesi === null ? 120 : (ortalamaNetYuzdesi < 30 ? 100 : (ortalamaNetYuzdesi < 70 ? 150 : 180));
+    } else if (sinavTuru === 'LGS') {
+        gunlukHedefSoru = ortalamaNetYuzdesi === null ? 70 : (ortalamaNetYuzdesi < 30 ? 60 : (ortalamaNetYuzdesi < 70 ? 90 : 110));
+    } else { // KPSS
+        gunlukHedefSoru = ortalamaNetYuzdesi === null ? 90 : (ortalamaNetYuzdesi < 30 ? 80 : (ortalamaNetYuzdesi < 70 ? 110 : 140));
+    }
+
+    // Paragraf/Problem/Geometri gibi sabit beceri pratiği artık AI'ye değil
+    // koda ait - günlük hedeften bunların payını düşüp kalanını (asıl konu
+    // bazlı ödevler için) AI'ye bırakıyoruz. Hafta sonu (Cumartesi/Pazar)
+    // tamamen deneme+analiz olduğu için haftalık toplam SADECE 5 hafta içi
+    // günü kapsıyor.
+    const sabitPratikTanimlari = sabitGunlukPratikOlustur(sinavTuru, izinliMufredat);
+    const sabitGunlukToplam = sabitPratikTanimlari.reduce((s, t) => s + t.soru_sayisi, 0);
+    const aiGunlukHedef = Math.max(20, gunlukHedefSoru - sabitGunlukToplam);
+    const haftalikHedefSoru = aiGunlukHedef * HAFTA_ICI_GUNLER.length;
 
     const plan = await generateHomeworkPlan({
         sinif, sinavTuru, aytAlani, hedef, tamamlananKonular, zayifKonular, tekrarEdenZayifKonular,
@@ -1466,6 +1549,11 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
     });
     if (!plan || !Array.isArray(plan.odevler)) return;
 
+    // Hafta sonu artık kesinlikle deneme+analiz - model talimata rağmen bu
+    // günlere satır atarsa (küçük modeller talimatı atlayabiliyor) sessizce
+    // düşürüyoruz, aşağıda zaten ayrı, garanti bir deneme satırı ekleniyor.
+    plan.odevler = plan.odevler.filter(o => o && o.gun !== 'Cumartesi' && o.gun !== 'Pazar');
+
     // AI modeli (küçük/ucuz bir model) haftalık toplam soru hedefini metinden
     // kendi toplayıp tutturmakta güvenilir değil - gözlemlenen davranış,
     // hedefin çok altında (örn. 1100 istenirken ~150-200) planlar üretmesiydi.
@@ -1473,7 +1561,7 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
     // orantılı şekilde hedefe yaklaştırıyoruz (matematiği koda bırakıyoruz).
     {
         const gecerliOdevSatirlari = plan.odevler.filter(o => o && Number.isFinite(Number(o.soru_sayisi)));
-        const mevcutToplam = gecerliOdevSatirlari.reduce((s, o) => s + Number(o.soru_sayisi) * (o.gun === 'Her gün' ? 7 : 1), 0);
+        const mevcutToplam = gecerliOdevSatirlari.reduce((s, o) => s + Number(o.soru_sayisi) * (o.gun === 'Her gün' ? HAFTA_ICI_GUNLER.length : 1), 0);
         if (mevcutToplam > 0 && mevcutToplam < haftalikHedefSoru * 0.6) {
             const carpan = haftalikHedefSoru / mevcutToplam;
             gecerliOdevSatirlari.forEach(o => {
@@ -1503,9 +1591,26 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
             };
         })
         .filter(o => o.topics.length > 0);
-    const satirlar = temelSatirlar.flatMap(o => o.gun === 'Her gün'
-        ? GECERLI_GUNLER.map(gun => ({ ...o, gun }))
-        : [{ ...o, gun: GECERLI_GUNLER.includes(o.gun) ? o.gun : null }]);
+    const aiSatirlari = temelSatirlar.flatMap(o => o.gun === 'Her gün'
+        ? HAFTA_ICI_GUNLER.map(gun => ({ ...o, gun }))
+        : [{ ...o, gun: HAFTA_ICI_GUNLER.includes(o.gun) ? o.gun : null }]);
+
+    // Sabit beceri pratiği (Paragraf/Problem/Geometri) - hafta içi her gün,
+    // garanti olarak.
+    const sabitSatirlari = sabitPratikTanimlari.flatMap(t => HAFTA_ICI_GUNLER.map(gun => ({
+        teacher_id: null, student_id: userId, exam_type: sinavTuru, subject: t.ders, topics: t.konular,
+        question_count: t.soru_sayisi, date_assigned: new Date().toISOString(), status: 'pending',
+        completed: false, source: 'ai', gun, hafta_no: hedefHaftaNo
+    })));
+
+    // Hafta sonu deneme sınavı + hata analizi - garanti olarak.
+    const denemeSatirlari = denemeSatirlariOlustur(sinavTuru).map(d => ({
+        teacher_id: null, student_id: userId, exam_type: sinavTuru, subject: 'Deneme Sınavı',
+        topics: [d.konu], question_count: null, date_assigned: new Date().toISOString(), status: 'pending',
+        completed: false, source: 'ai', gun: d.gun, hafta_no: hedefHaftaNo
+    }));
+
+    const satirlar = [...aiSatirlari, ...sabitSatirlari, ...denemeSatirlari];
 
     if (yeniHafta) {
         // Sadece son 2 haftayı sakla - 3. program üretilince en eskisi silinir.
@@ -1530,7 +1635,7 @@ async function odevPlaniUretVeUygula(userId, { sinif, aytAlani, hedef, tamamlana
         const gunGruplari = GECERLI_GUNLER.map(gun => {
             const oGun = satirlar.filter(s => s.gun === gun);
             if (oGun.length === 0) return null;
-            const satirMetni = oGun.map(s => `${s.subject} (${s.topics.join(', ')}) - ${s.question_count} soru`).join('; ');
+            const satirMetni = oGun.map(s => `${s.subject} (${s.topics.join(', ')})${s.question_count ? ' - ' + s.question_count + ' soru' : ''}`).join('; ');
             return `${gun}: ${satirMetni}`;
         }).filter(Boolean).join('\n');
 
