@@ -18,6 +18,20 @@ const { odemeBaslat: paytrOdemeBaslat, bildirimDogrula: paytrBildirimDogrula, pa
 
 const app = express();
 
+// ==========================================
+// GEÇİCİ: PREMIUM SATIŞI DURAKLATILDI
+// ==========================================
+// Berke, kullanıcı sayısı büyüyüp vergi/Bağkur ("genç girişimci") konusunu
+// netleştirene kadar Premium'u geçici olarak durdurmaya karar verdi (bkz.
+// sohbet, 2026-09-22). Bu true iken TÜM kullanıcılar hesaplarındaki gerçek
+// 'level' değeri ne olursa olsun Premium özelliklerine erişir ve ödeme
+// akışı devre dışı kalır. Hazır olunca burayı false yapmak yeterli - alttaki
+// kullaniciPremiumMi() her yerde kullanıldığı için tek satırlık geri dönüş.
+const PREMIUM_SATISTA_MI = false;
+function kullaniciPremiumMi(user) {
+    return PREMIUM_SATISTA_MI ? (user?.level === 'Premium') : true;
+}
+
 // Render (ve genel olarak her reverse proxy arkasındaki Node servisi) için
 // zorunlu: bu olmadan Express "secure" cookie'yi doğru işleyemez ve
 // express-session hiçbir zaman oturum çerezini tarayıcıya yazmaz. Bunun
@@ -1392,7 +1406,7 @@ app.get('/wrong-questions', requireLogin, async (req, res) => {
         const { data: questionsRaw } = await supabase.from('wrong_questions').select('*').eq('user_id', user.id);
         const questions = (questionsRaw || []).sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
 
-        const limitReached = user.level !== 'Premium' && questions.length >= 5;
+        const limitReached = !kullaniciPremiumMi(user) && questions.length >= 5;
 
         res.render('wrong-questions', { user, questions, limitReached, tumDersler: getTumDersler() });
     } catch (error) {
@@ -1619,7 +1633,7 @@ app.post('/api/ai-koc/mesaj-gonder', requireLogin, async (req, res) => {
         if (!mesaj) return res.status(400).json({ success: false, message: 'Boş mesaj gönderilemez.' });
 
         // Free: günde 5 mesaj. Premium: sınırsız.
-        if (user.level !== 'Premium') {
+        if (!kullaniciPremiumMi(user)) {
             const gunBasi = new Date(); gunBasi.setHours(0, 0, 0, 0);
             const { count } = await supabase.from('ai_mesajlar').select('id', { count: 'exact', head: true })
                 .eq('user_id', user.id).eq('rol', 'user').gte('tarih', gunBasi.toISOString());
@@ -1761,7 +1775,7 @@ app.get('/leaderboard', requireLogin, async (req, res) => {
             .filter(u => Number(u.en_yuksek_net || 0) > 0)
             .sort((a, b) => Number(b.en_yuksek_net) - Number(a.en_yuksek_net));
 
-        const isPremium = user.level === 'Premium';
+        const isPremium = kullaniciPremiumMi(user);
         const visibleList = isPremium ? fullList : fullList.slice(0, 5);
 
         res.render('leaderboard', { user, visibleList, isPremium, fullListLength: fullList.length });
@@ -1845,7 +1859,8 @@ app.get('/payment', requireLogin, async (req, res) => {
 
     res.render('payment', {
         premiumFiyat: PREMIUM_FIYAT_TL,
-        odemeAktif: AKTIF_SAGLAYICI === 'paytr' ? paytrAktif : iyzicoAktif,
+        odemeAktif: PREMIUM_SATISTA_MI && (AKTIF_SAGLAYICI === 'paytr' ? paytrAktif : iyzicoAktif),
+        premiumDuraklatildi: !PREMIUM_SATISTA_MI,
         odemeBasarisiz: req.query.durum === 'basarisiz' || req.query.durum === 'hata'
     });
 });
@@ -1856,6 +1871,7 @@ app.post('/api/payment/baslat', requireLogin, async (req, res) => {
     try {
         const user = await currentUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+        if (!PREMIUM_SATISTA_MI) return res.status(503).json({ success: false, message: 'Premium satışı şu an duraklatıldı - tüm özellikler zaten ücretsiz açık.' });
         if (user.level === 'Premium') return res.status(400).json({ success: false, message: 'Zaten Premium üyesin.' });
 
         const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '85.34.78.112';
@@ -1987,7 +2003,7 @@ app.post('/add-video', requireLogin, async (req, res) => {
 
 app.get('/premium-dersler', requireLogin, async (req, res) => {
     const user = await currentUser(req);
-    if (!user || user.level !== 'Premium') {
+    if (!user || !kullaniciPremiumMi(user)) {
         return res.status(403).send(errorPage('Premium Gerekli', 'Bu laboratuvar sadece Premium üyeler içindir.', '/payment'));
     }
 
@@ -2169,7 +2185,7 @@ app.get('/net-analiz/:analizId/konu-detay', requireLogin, async (req, res) => {
         // kullanıcı hiçbir şey girmeden, sadece net yüzdesine bakan basit bir
         // otomatik özet görüyor. İkisi de aynı sayfada, kart açılıp
         // kapanmasıyla ilgisi yok - Free'de konu listesi hiç gösterilmiyor.
-        const isPremium = user.level === 'Premium';
+        const isPremium = kullaniciPremiumMi(user);
         if (!isPremium) {
             const alanOzet = alanlar
                 .map(alan => {
@@ -2417,7 +2433,7 @@ app.post('/api/wrong-questions/add', async (req, res) => {
         const user = await resolveUser(req);
         if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
 
-        if (user.level !== 'Premium') {
+        if (!kullaniciPremiumMi(user)) {
             const { count } = await supabase.from('wrong_questions').select('id', { count: 'exact', head: true }).eq('user_id', user.id);
             if ((count || 0) >= 5) {
                 return res.status(403).json({ success: false, message: 'Free üyelikte hata defterine en fazla 5 soru eklenebilir. Premium\'a geçerek sınırsız ekleyebilirsin.' });

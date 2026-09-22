@@ -29,7 +29,11 @@
         <% } %>
 
         <% if (!odemeAktif) { %>
-            <div class="alert alert-warning small">Ödeme sistemi şu an bakımda/yapılandırılmamış, birazdan tekrar dene.</div>
+            <% if (typeof premiumDuraklatildi !== 'undefined' && premiumDuraklatildi) { %>
+                <div class="alert alert-success small">Premium şu anda herkese ücretsiz açık! Satın almana gerek yok, tüm özellikleri kullanabilirsin. 🎉</div>
+            <% } else { %>
+                <div class="alert alert-warning small">Ödeme sistemi şu an bakımda/yapılandırılmamış, birazdan tekrar dene.</div>
+            <% } %>
         <% } else { %>
             <div id="baslangicAlani">
                 <p class="text-secondary small">Kart bilgilerini SmartStudy'e değil, doğrudan güvenli ödeme sağlayıcımıza gireceksin - kart numaranı hiçbir zaman bizim sunucularımız görmüyor.</p>
