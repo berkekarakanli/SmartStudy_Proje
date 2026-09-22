@@ -1193,6 +1193,37 @@ function computeBadges({ analizler, wrongCount, pomodoroDakika, referralCount, k
     ];
 }
 
+// Mobil profil ekranının rozet duvarını GERÇEK veriyle doldurabilmesi için -
+// /profile'daki computeBadges() ile birebir aynı mantığı JSON olarak
+// döndürüyor (mobil eskiden burada tamamen uydurma/sabit rozetler gösteriyordu).
+app.get('/api/rozetler', async (req, res) => {
+    try {
+        const user = await resolveUser(req);
+        if (!user) return res.status(401).json({ success: false, message: 'Oturum süresi doldu.' });
+
+        const [{ data: analizler }, { data: wrongQuestions }] = await Promise.all([
+            supabase.from('analizler').select('*').eq('user_id', user.id),
+            supabase.from('wrong_questions').select('*').eq('user_id', user.id)
+        ]);
+        const kocListesi = user.bagli_koc_listesi || (user.bagli_koc_kodu ? [{ ad: user.bagli_koc_ad || 'Eğitmen' }] : []);
+
+        const pomodoroDakika = Number(user.pomodoro_dakika || 0);
+        const badges = computeBadges({
+            analizler: analizler || [],
+            wrongCount: (wrongQuestions || []).length,
+            pomodoroDakika,
+            referralCount: Number(user.referral_count || 0),
+            kocSayisi: kocListesi.length,
+            isPremium: user.level === 'Premium'
+        });
+
+        res.json({ success: true, badges, pomodoroDakika, hasCoach: kocListesi.length > 0 });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, message: 'Rozetler yüklenemedi.' });
+    }
+});
+
 app.get('/profile', requireLogin, async (req, res) => {
     const user = await currentUser(req);
     if (!user) return res.redirect('/login');
@@ -1787,16 +1818,21 @@ const AKTIF_SAGLAYICI = 'iyzico'; // 'iyzico' | 'paytr'
 // YAZMAK yerine, WebView bu uca ?token=... ile geliyor, biz token'ı
 // doğrulayıp normal bir web oturumu (session) başlatıyor ve /payment'e
 // yönlendiriyoruz - böylece mobil de web'le AYNI, gerçek ödeme kodunu kullanıyor.
-app.get('/mobil-odeme-giris', async (req, res) => {
+// "next" SADECE bilinen, güvenli iç sayfalara izin veriyor - dışarıdan
+// keyfi bir adrese yönlendirme (open redirect) açığı olmasın diye.
+const MOBIL_GIRIS_IZINLI_ONEKLER = ['/payment', '/student-coach', '/ayarlar', '/destek', '/premium-dersler', '/net-analiz/'];
+app.get('/mobil-oturum-giris', async (req, res) => {
     try {
         const token = req.query.token;
-        if (!token) return res.redirect('/login');
+        const next = typeof req.query.next === 'string' ? req.query.next : '/payment';
+        const guvenli = MOBIL_GIRIS_IZINLI_ONEKLER.some(onek => next === onek || next.startsWith(onek));
+        if (!token || !guvenli) return res.redirect('/login');
         const { data: tokenData, error: tokenError } = await supabase.auth.getUser(token);
         if (tokenError || !tokenData?.user) return res.redirect('/login');
         const { data: user } = await supabase.from('profiles').select('*').eq('id', tokenData.user.id).maybeSingle();
         if (!user) return res.redirect('/login');
         syncSessionUser(req, user);
-        res.redirect('/payment');
+        res.redirect(next);
     } catch (error) {
         console.error(error);
         res.redirect('/login');
