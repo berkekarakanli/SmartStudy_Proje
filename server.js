@@ -553,13 +553,13 @@ app.post('/register', registerLimiter, async (req, res) => {
         }
 
         // Davet (referans) sistemi: her kullanıcının kendi kodu var, bu kodla
-        // gelen her yeni kayıt referral_count'u artırır; 10'a ulaşınca
-        // davet eden otomatik Premium olur. Kullanıcı oluşturulmadan önce
-        // referans kodunun geçerli olup olmadığına bakıyoruz.
+        // gelen her yeni kayıt referral_count'u artırır (Davetçi/Topluluk
+        // Elçisi rozetleri için). Kullanıcı oluşturulmadan önce referans
+        // kodunun geçerli olup olmadığına bakıyoruz.
         const gelenRefKodu = String(req.body.ref || '').trim().toUpperCase();
         let referrer = null;
         if (gelenRefKodu) {
-            const { data } = await supabase.from('profiles').select('id, referral_count, level').eq('referral_code', gelenRefKodu).maybeSingle();
+            const { data } = await supabase.from('profiles').select('id, referral_count').eq('referral_code', gelenRefKodu).maybeSingle();
             referrer = data || null;
         }
 
@@ -615,12 +615,7 @@ app.post('/register', registerLimiter, async (req, res) => {
 
         if (referrer) {
             const yeniSayi = Number(referrer.referral_count || 0) + 1;
-            const referrerUpdates = { referral_count: yeniSayi };
-            // Her 10 davette bir Premium ödülü (zaten Premium'sa dokunmuyor).
-            if (yeniSayi % 10 === 0 && referrer.level !== 'Premium') {
-                referrerUpdates.level = 'Premium';
-            }
-            await supabase.from('profiles').update(referrerUpdates).eq('id', referrer.id);
+            await supabase.from('profiles').update({ referral_count: yeniSayi }).eq('id', referrer.id);
         }
 
         if (wantsJson(req)) {
@@ -1259,7 +1254,6 @@ app.get('/profile', requireLogin, async (req, res) => {
         await supabase.from('profiles').update({ referral_code: referralCode }).eq('id', user.id);
     }
     const referralCount = Number(user.referral_count || 0);
-    const referralRemaining = 10 - (referralCount % 10);
 
     const badges = computeBadges({
         analizler: analizler || [],
@@ -1295,7 +1289,6 @@ app.get('/profile', requireLogin, async (req, res) => {
         kocListesi,
         referralCode,
         referralCount,
-        referralRemaining,
         badges,
         yeniRozetler
     });
